@@ -8,7 +8,6 @@ import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 
 @Entity
@@ -16,7 +15,6 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-@RequiredArgsConstructor
 public class Account {
 
   @Id private String vpa;
@@ -28,4 +26,10 @@ public class Account {
   private BigDecimal balance;
 
   @Version private Long version;
+
+  public Account(String vpa, String holderName, BigDecimal balance) {
+    this.vpa = vpa;
+    this.holderName = holderName;
+    this.balance = balance;
+  }
 }
