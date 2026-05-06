@@ -67,7 +67,7 @@ public class HybridCryptoService {
     // 2. Payload encrypt by AES-GCM
     byte[] iv = new byte[GCM_IV_BYTES];
     rng.nextBytes(iv);
-    Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+    Cipher cipher = Cipher.getInstance(AES_TRANSFORMATION);
     cipher.init(Cipher.ENCRYPT_MODE, aesKey, new GCMParameterSpec(GCM_TAG_BITS, iv));
     byte[] aesCiphertext = cipher.doFinal(plaintext);
 

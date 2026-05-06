@@ -29,7 +29,7 @@ public class MeshSimulatorService {
   }
 
   private void seedDefaultDevices() {
-    devices.put("phone-alice", new VirtualDevice("phone-shubham", false));
+    devices.put("phone-shubham", new VirtualDevice("phone-shubham", false));
     devices.put("phone-stranger1", new VirtualDevice("phone-stranger1", false));
     devices.put("phone-stranger2", new VirtualDevice("phone-stranger2", false));
     devices.put("phone-stranger3", new VirtualDevice("phone-stranger3", false));
