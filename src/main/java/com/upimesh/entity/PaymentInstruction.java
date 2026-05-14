@@ -29,4 +29,5 @@ public class PaymentInstruction {
   private String pinHash;
   private String nonce; // UUID, unique per payment intent
   private Long signedAt; // epoch millis, when sender signed
+  private String spendTokenNonce; // token nonce issued by server before going offline
 }
