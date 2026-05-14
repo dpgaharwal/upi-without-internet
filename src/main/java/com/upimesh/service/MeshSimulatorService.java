@@ -20,53 +20,43 @@ public class MeshSimulatorService {
     seedDefaultDevices();
   }
 
-  public Collection<VirtualDevice> getDevices() {
-    return devices.values();
-  }
-
-  public VirtualDevice getDevice(String id) {
-    return devices.get(id);
-  }
-
   private void seedDefaultDevices() {
-    devices.put("phone-shubham", new VirtualDevice("phone-shubham", false));
+    devices.put("phone-shubham",   new VirtualDevice("phone-shubham",   false));
     devices.put("phone-stranger1", new VirtualDevice("phone-stranger1", false));
     devices.put("phone-stranger2", new VirtualDevice("phone-stranger2", false));
     devices.put("phone-stranger3", new VirtualDevice("phone-stranger3", false));
-    devices.put("phone-bridge", new VirtualDevice("phone-bridge", true));
+    devices.put("phone-bridge",    new VirtualDevice("phone-bridge",    true));
   }
 
   private final Map<String, VirtualDevice> devices = new ConcurrentHashMap<>();
 
-  /** Sender drops a packet into the mesh by handing it to their own device. */
+  public Collection<VirtualDevice> getDevices() { return devices.values(); }
+  public VirtualDevice getDevice(String id)      { return devices.get(id); }
+
   public void inject(String senderDeviceId, MeshPacket packet) {
     VirtualDevice sender = devices.get(senderDeviceId);
-
-    if (sender == null) {
-      throw new IllegalArgumentException("Unknown device: " + senderDeviceId);
-    }
+    if (sender == null) throw new IllegalArgumentException("Unknown device: " + senderDeviceId);
     sender.hold(packet);
-    log.info(
-        "Packet {} injected at {} (TTL={})",
-        packet.getPacketId().substring(0, 8),
-        senderDeviceId,
-        packet.getTtl());
+    log.info("Packet {} injected at {} (TTL={}, hopCount={})",
+            packet.getPacketId().substring(0, 8), senderDeviceId,
+            packet.getTtl(), packet.getHopCount());
   }
 
   /**
-   * One round of gossip. Every device shares everything it has with every other device. TTL is
-   * decremented per hop; packets at TTL 0 stay where they are but are not forwarded further.
+   * One round of gossip.
    *
-   * <p>Real BLE gossip would be pair-by-pair when devices come into range. For the demo we let
-   * everyone gossip with everyone in one round, which is equivalent to "fast-forward N rounds of
-   * pairwise gossip".
+   * CHANGE FOR PROBLEM 5:
+   * When copying a packet to another device, we now increment hopCount
+   * by 1. This means after N gossip rounds through N devices, the packet
+   * carries the real hop count when the bridge uploads it.
+   *
+   * This hop count is then passed to BridgeIngestionService which
+   * compares it against instruction.maxHops (inside the encrypted blob).
    */
   public GossipResult gossipOnce() {
     int transfers = 0;
     List<VirtualDevice> deviceList = new ArrayList<>(devices.values());
 
-    // Snapshot what each device holds at the start of this round, so
-    // we don't gossip the same packet through 5 devices in 1 step.
     Map<String, List<MeshPacket>> snapshot = new HashMap<>();
     for (VirtualDevice d : deviceList) {
       snapshot.put(d.getDeviceId(), new ArrayList<>(d.getHeldPackets()));
@@ -78,11 +68,14 @@ public class MeshSimulatorService {
         for (VirtualDevice dst : deviceList) {
           if (dst == src) continue;
           if (dst.holds(pkt.getPacketId())) continue;
+
           MeshPacket copy = new MeshPacket();
           copy.setPacketId(pkt.getPacketId());
           copy.setTtl(pkt.getTtl() - 1);
           copy.setCreatedAt(pkt.getCreatedAt());
           copy.setCiphertext(pkt.getCiphertext());
+          copy.setHopCount(pkt.getHopCount() + 1); // PROBLEM 5 — increment hop count
+
           dst.hold(copy);
           transfers++;
         }
@@ -93,17 +86,10 @@ public class MeshSimulatorService {
     return new GossipResult(transfers, snapshotMap());
   }
 
-  public Map<String, Integer> snapshotMap() {
-    Map<String, Integer> m = new LinkedHashMap<>();
-    for (VirtualDevice d : devices.values()) {
-      m.put(d.getDeviceId(), d.packetCount());
-    }
-    return m;
-  }
-
   /**
-   * Returns all packets held by devices with internet — these are what would be uploaded to the
-   * backend the moment they reach connectivity.
+   * CHANGE FOR PROBLEM 5:
+   * Now passes packet.getHopCount() as the hop count to BridgeIngestionService
+   * instead of computing it from TTL. This is the real accumulated hop count.
    */
   public List<BridgeUpload> collectBridgeUploads() {
     List<BridgeUpload> out = new ArrayList<>();
@@ -116,11 +102,18 @@ public class MeshSimulatorService {
     return out;
   }
 
+  public Map<String, Integer> snapshotMap() {
+    Map<String, Integer> m = new LinkedHashMap<>();
+    for (VirtualDevice d : devices.values()) {
+      m.put(d.getDeviceId(), d.packetCount());
+    }
+    return m;
+  }
+
   public void resetMesh() {
     devices.values().forEach(VirtualDevice::clear);
   }
 
   public record GossipResult(int transfers, Map<String, Integer> deviceCounts) {}
-
   public record BridgeUpload(String bridgeNodeId, MeshPacket packet) {}
 }

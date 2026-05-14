@@ -30,7 +30,7 @@ public class DemoService {
   @PostConstruct
   public void seedAccount() {
     if (accounts.count() == 0) {
-      accounts.save(new Account("ShubhamTiwari@demo", "Shubham Tiwari", new BigDecimal("2000000.00")));
+      accounts.save(new Account("ShubhamTiwari@demo", "Shubham Tiwari", new BigDecimal("500.00")));
       accounts.save(new Account("Sarvesh@demo", "Sarvesh", new BigDecimal("70000.00")));
       accounts.save(new Account("Rushabh@demo", "Rushabh", new BigDecimal("80000.00")));
       accounts.save(new Account("Sudarshan@demo", "Sudarshan", new BigDecimal("90000.00")));
@@ -39,23 +39,29 @@ public class DemoService {
   }
 
   /**
-   * UPDATED: now accepts spendTokenNonce.
-   * The nonce is embedded inside PaymentInstruction before encryption,
-   * so it is invisible to intermediaries and tamper-proof.
+   * UPDATED
+   * - accepts spendTokenNonce
+   * - accepts maxHops — embedded inside encrypted payload
+   *
+   * maxHops default is 5 (same as TTL). Sender can set lower value
+   * e.g. maxHops=2 means packet is only valid if it reached server
+   * within 2 hops. More hops = rejected even if TTL was tampered.
    */
   public MeshPacket createPacket(
           String senderVpa, String receiverVpa,
           BigDecimal amount, String pin,
-          int ttl, String spendTokenNonce) throws Exception {
+          int ttl, String spendTokenNonce,
+          int maxHops) throws Exception {
 
     PaymentInstruction instruction = new PaymentInstruction(
             senderVpa,
             receiverVpa,
             amount,
             sha256Hex(pin),
-            UUID.randomUUID().toString(),  // payment nonce
+            UUID.randomUUID().toString(),
             Instant.now().toEpochMilli(),
-            spendTokenNonce);              // spend token nonce
+            spendTokenNonce,
+            maxHops);               // committed inside encrypted blob
 
     String ciphertext = crypto.encrypt(instruction, serverKey.getPublicKey());
 
