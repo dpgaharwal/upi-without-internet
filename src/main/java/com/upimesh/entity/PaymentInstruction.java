@@ -30,4 +30,5 @@ public class PaymentInstruction {
   private String nonce; // UUID, unique per payment intent
   private Long signedAt; // epoch millis, when sender signed
   private String spendTokenNonce; // token nonce issued by server before going offline
+  private int maxHops; // max hops sender allows (inside encrypted payload)
 }

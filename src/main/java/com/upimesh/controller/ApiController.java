@@ -106,28 +106,31 @@ public class ApiController {
   @PostMapping("/demo/send")
   public ResponseEntity<?> demoSend(@RequestBody DemoSendRequest req) throws Exception {
 
+    int maxHops = req.maxHops == null ? 5 : req.maxHops;
+
     MeshPacket packet = demo.createPacket(
             req.senderVpa,
             req.receiverVpa,
             req.amount,
             req.pin,
             req.ttl == null ? 5 : req.ttl,
-            req.spendTokenNonce);
+            req.spendTokenNonce,
+            maxHops);
 
     String startDevice = req.startDevice == null ? "phone-shubham" : req.startDevice;
     mesh.inject(startDevice, packet);
 
     return ResponseEntity.ok(Map.of(
-            "packetId", packet.getPacketId(),
+            "packetId",         packet.getPacketId(),
             "ciphertextPreview", packet.getCiphertext().substring(0, 64) + "...",
-            "ttl", packet.getTtl(),
-            "injectedAt", startDevice,
-            "spendTokenNonce", req.spendTokenNonce == null ? "none" :
-                    req.spendTokenNonce.substring(0, 8) + "..."));
+            "ttl",              packet.getTtl(),
+            "injectedAt",       startDevice,
+            "spendTokenNonce",  req.spendTokenNonce == null ? "none" :
+                    req.spendTokenNonce.substring(0, 8) + "...",
+            "maxHops",          maxHops));
   }
 
-  // ── Request/response shapes ───────────────────────────────────────────────
-
+  //  Request/response shapes
   public static class TokenIssueRequest {
     public String senderVpa;
     public BigDecimal amount;
@@ -140,10 +143,11 @@ public class ApiController {
     public String pin;
     public Integer ttl;
     public String startDevice;
-    public String spendTokenNonce; // NEW
+    public String spendTokenNonce;
+    public Integer maxHops;
   }
 
-  // ── Mesh endpoints (unchanged) ────────────────────────────────────────────
+  // Mesh endpoints
 
   @GetMapping("/mesh/state")
   public Map<String, Object> meshState() {

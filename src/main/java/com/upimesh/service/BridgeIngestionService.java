@@ -35,42 +35,51 @@ public class BridgeIngestionService {
     try {
       String packetHash = crypto.hashCiphertext(packet.getCiphertext());
 
-      // Idempotency check
+      // 1. Idempotency check
       if (!idempotency.claim(packetHash)) {
-        log.info(
-            "DUPLICATE packet {} from bridge {} — dropped",
-            packetHash.substring(0, 12) + "...",
-            bridgeNodeId);
+        log.info("DUPLICATE packet {} from bridge {} — dropped",
+                packetHash.substring(0, 12) + "...", bridgeNodeId);
         return IngestResult.duplicate(packetHash);
       }
 
+      // 2. Decrypt
       PaymentInstruction instruction;
       try {
         instruction = crypto.decrypt(packet.getCiphertext());
       } catch (Exception e) {
-        log.warn(
-            "Decryption failed for packet {}: {}",
-            packetHash.substring(0, 12) + "...",
-            e.getMessage());
+        log.warn("Decryption failed for packet {}: {}",
+                packetHash.substring(0, 12) + "...", e.getMessage());
         return IngestResult.invalid(packetHash, "decryption_failed");
       }
 
-      // Freshness check
+      // 3. Freshness check
       long ageSeconds = (Instant.now().toEpochMilli() - instruction.getSignedAt()) / 1000;
       if (ageSeconds > maxAgeSeconds) {
-        log.warn(
-            "Packet {} too old ({}s), rejected", packetHash.substring(0, 12) + "...", ageSeconds);
+        log.warn("Packet {} too old ({}s)", packetHash.substring(0, 12) + "...", ageSeconds);
         return IngestResult.invalid(packetHash, "stale_packet");
       }
-      if (ageSeconds < -300) { // small clock-skew tolerance
+      if (ageSeconds < -300) {
         return IngestResult.invalid(packetHash, "future_dated");
       }
 
-      Transaction tx = settlement.settle(instruction, packetHash, bridgeNodeId, hopCount);
-      if (tx.getStatus() == Status.REJECTED) {
-        return IngestResult.invalid(packetHash, "rejected: " + tx.getStatus().name());
+      int maxHops = instruction.getMaxHops();
+      if (maxHops > 0 && hopCount > maxHops) {
+        log.warn("Packet {} exceeded maxHops: allowed={} actual={}",
+                packetHash.substring(0, 12) + "...", maxHops, hopCount);
+        return IngestResult.invalid(packetHash,
+                "exceeded_max_hops: allowed=" + maxHops + " actual=" + hopCount);
       }
+
+
+      // 4. Settle
+      Transaction tx = settlement.settle(instruction, packetHash, bridgeNodeId, hopCount);
+
+      if (tx.getStatus() == com.upimesh.enums.Status.REJECTED) {
+        return IngestResult.invalid(packetHash, "settlement_rejected");
+      }
+
       return IngestResult.settled(packetHash, tx);
+
     } catch (Exception e) {
       log.error("Ingestion error: {}", e.getMessage(), e);
       return IngestResult.invalid("?", "internal_error: " + e.getMessage());
@@ -81,11 +90,9 @@ public class BridgeIngestionService {
     public static IngestResult settled(String hash, Transaction tx) {
       return new IngestResult("SETTLED", hash, null, tx.getId());
     }
-
     public static IngestResult duplicate(String hash) {
       return new IngestResult("DUPLICATE_DROPPED", hash, null, null);
     }
-
     public static IngestResult invalid(String hash, String reason) {
       return new IngestResult("INVALID", hash, reason, null);
     }
