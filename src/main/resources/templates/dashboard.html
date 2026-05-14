@@ -29,6 +29,8 @@
       --amber-bg: rgba(245,158,11,0.10);
       --blue: #3B82F6;
       --blue-bg: rgba(59,130,246,0.10);
+      --purple: #A855F7;
+      --purple-bg: rgba(168,85,247,0.10);
       --radius-sm: 6px;
       --radius: 10px;
       --radius-lg: 14px;
@@ -46,10 +48,9 @@
       line-height: 1.5;
     }
 
-    /* ── LAYOUT ── */
     .app { max-width: 1100px; margin: 0 auto; padding: 24px 20px 48px; }
 
-    /* ── HEADER ── */
+    /* HEADER */
     .header {
       display: flex; align-items: flex-start; gap: 14px;
       padding-bottom: 20px; margin-bottom: 24px;
@@ -61,23 +62,30 @@
       box-shadow: 0 0 0 1px rgba(255,107,0,0.3), 0 8px 24px rgba(255,107,0,0.25);
     }
     .app-icon svg { width: 24px; height: 24px; }
-    .header-text h1 { font-size: 17px; font-weight: 600; color: var(--text); }
+    .header-text h1 { font-size: 17px; font-weight: 600; }
     .header-text p { font-size: 13px; color: var(--text2); margin-top: 2px; }
     .tag-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
     .tag {
       font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 20px;
       border: 1px solid var(--border); color: var(--text2); background: var(--surface2);
-      letter-spacing: 0.02em;
     }
     .tag.orange { background: var(--orange-bg); border-color: rgba(255,107,0,0.3); color: var(--orange); }
+    .tag.purple { background: var(--purple-bg); border-color: rgba(168,85,247,0.3); color: var(--purple); }
 
-    /* ── FLOW SECTION ── */
+    /* SECTION LABEL */
+    .section-label {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.12em;
+      color: var(--text3); text-transform: uppercase;
+      margin: 24px 0 10px;
+    }
+
+    /* FLOW CARD */
     .flow-card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-xl);
       padding: 20px;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
     .flow-label {
       font-size: 10px; font-weight: 600; letter-spacing: 0.12em;
@@ -88,50 +96,47 @@
     .step-num {
       width: 26px; height: 26px; min-width: 26px; border-radius: 50%;
       background: var(--orange); color: white;
-      font-size: 12px; font-weight: 600; display: flex;
-      align-items: center; justify-content: center;
-      box-shadow: 0 0 0 3px var(--orange-glow);
-      margin-top: 1px;
+      font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 0 3px var(--orange-glow); margin-top: 1px;
     }
+    .step-num.purple { background: var(--purple); box-shadow: 0 0 0 3px rgba(168,85,247,0.18); }
     .step-body { flex: 1; }
-    .step-title { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 10px; }
+    .step-title { font-size: 13px; font-weight: 500; margin-bottom: 10px; }
+    .step-note { font-size: 11px; color: var(--text3); margin-top: 6px; }
 
-    /* form inputs */
+    /* INPUTS */
     .input-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     select, input[type="number"], input[type="text"] {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--text);
-      border-radius: var(--radius-sm);
-      padding: 7px 10px;
-      font-size: 13px;
-      font-family: 'DM Sans', sans-serif;
-      outline: none;
-      transition: border-color 0.15s;
-      appearance: none;
-      -webkit-appearance: none;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); border-radius: var(--radius-sm);
+      padding: 7px 10px; font-size: 13px;
+      font-family: 'DM Sans', sans-serif; outline: none;
+      transition: border-color 0.15s; appearance: none; -webkit-appearance: none;
     }
-    select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239A9A9E' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; padding-right: 28px; }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239A9A9E' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 8px center; padding-right: 28px;
+    }
     select:focus, input:focus { border-color: var(--orange); box-shadow: 0 0 0 3px var(--orange-glow); }
     .arrow-sep { color: var(--text3); font-size: 13px; }
-    .rupee-wrap, .pin-wrap { display: flex; align-items: stretch; gap: 0; }
+    .rupee-wrap, .pin-wrap { display: flex; align-items: stretch; }
     .rupee-prefix, .pin-label {
       display: flex; align-items: center;
       background: var(--surface3); border: 1px solid var(--border);
       border-right: none; color: var(--text2); font-size: 13px;
     }
     .rupee-prefix { border-radius: var(--radius-sm) 0 0 var(--radius-sm); padding: 0 9px; }
-    .pin-label { border-radius: var(--radius-sm) 0 0 var(--radius-sm); padding: 0 9px; font-size: 11px; letter-spacing: 0.06em; font-weight: 500; }
+    .pin-label { border-radius: var(--radius-sm) 0 0 var(--radius-sm); padding: 0 9px; font-size: 11px; font-weight: 500; }
     .rupee-wrap input { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; width: 90px; }
     .pin-wrap input { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; width: 70px; font-family: 'DM Mono', monospace; }
 
-    /* buttons */
+    /* BUTTONS */
     .btn {
       display: inline-flex; align-items: center; gap: 6px;
       font-size: 13px; font-weight: 500; padding: 7px 14px;
       border-radius: var(--radius-sm); cursor: pointer; border: none;
-      font-family: 'DM Sans', sans-serif;
-      transition: opacity 0.15s, transform 0.1s;
+      font-family: 'DM Sans', sans-serif; transition: opacity 0.15s, transform 0.1s;
     }
     .btn:active { transform: scale(0.97); }
     .btn svg { width: 14px; height: 14px; }
@@ -139,65 +144,116 @@
     .btn-orange:hover { background: #ff7a1a; }
     .btn-blue { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(59,130,246,0.25); }
     .btn-blue:hover { background: rgba(59,130,246,0.18); }
+    .btn-purple { background: var(--purple-bg); color: var(--purple); border: 1px solid rgba(168,85,247,0.25); }
+    .btn-purple:hover { background: rgba(168,85,247,0.18); }
     .btn-ghost { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
     .btn-ghost:hover { border-color: var(--border-hover); color: var(--text); }
     .btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid rgba(239,68,68,0.25); }
     .btn-danger:hover { background: rgba(239,68,68,0.18); }
     .btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .step-note { font-size: 11px; color: var(--text3); }
 
-    /* ── GRID ── */
+    /* TOKEN PANEL */
+    .token-card {
+      background: var(--surface);
+      border: 1px solid rgba(168,85,247,0.2);
+      border-radius: var(--radius-xl);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .token-header {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 16px;
+    }
+    .token-icon {
+      width: 32px; height: 32px; border-radius: 10px;
+      background: var(--purple-bg); border: 1px solid rgba(168,85,247,0.25);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .token-icon svg { width: 16px; height: 16px; color: var(--purple); }
+    .token-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    .token-subtitle { font-size: 12px; color: var(--text3); }
+
+    /* NONCE DISPLAY BOX */
+    .nonce-box {
+      background: var(--surface2);
+      border: 1px solid rgba(168,85,247,0.25);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      margin-top: 12px;
+      display: none;
+    }
+    .nonce-box.visible { display: block; }
+    .nonce-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; color: var(--purple); text-transform: uppercase; margin-bottom: 6px; }
+    .nonce-value {
+      font-family: 'DM Mono', monospace; font-size: 12px;
+      color: var(--text); word-break: break-all;
+    }
+    .nonce-meta { font-size: 11px; color: var(--text3); margin-top: 6px; }
+    .nonce-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+    /* TOKEN LIST */
+    .token-list { margin-top: 14px; }
+    .token-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 0; border-bottom: 1px solid var(--border);
+    }
+    .token-row:last-child { border-bottom: none; }
+    .token-badge {
+      font-size: 10px; font-weight: 600; padding: 3px 8px;
+      border-radius: 20px; white-space: nowrap;
+    }
+    .badge-ACTIVE   { background: var(--green-bg);  color: var(--green);  border: 1px solid rgba(34,197,94,0.2); }
+    .badge-CONSUMED { background: var(--blue-bg);   color: var(--blue);   border: 1px solid rgba(59,130,246,0.2); }
+    .badge-EXPIRED  { background: var(--surface3);  color: var(--text3);  border: 1px solid var(--border); }
+    .token-nonce { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text2); }
+    .token-amount { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--green); margin-left: auto; }
+    .token-vpa { font-size: 11px; color: var(--text3); }
+
+    /* WARNING BANNER */
+    .warning-banner {
+      background: var(--amber-bg); border: 1px solid rgba(245,158,11,0.25);
+      border-radius: var(--radius); padding: 10px 14px;
+      font-size: 12px; color: var(--amber); margin-top: 10px;
+      display: flex; align-items: flex-start; gap: 8px;
+    }
+    .warning-banner svg { width: 14px; height: 14px; min-width: 14px; margin-top: 1px; }
+
+    /* GRID */
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
     @media (max-width: 620px) { .grid2 { grid-template-columns: 1fr; } }
 
-    /* ── PANEL ── */
-    .panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-xl);
-      overflow: hidden;
-    }
+    /* PANEL */
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); overflow: hidden; }
     .panel-head {
       display: flex; align-items: center; gap: 8px;
-      padding: 13px 16px;
-      border-bottom: 1px solid var(--border);
-      font-size: 13px; font-weight: 500; color: var(--text);
+      padding: 13px 16px; border-bottom: 1px solid var(--border);
+      font-size: 13px; font-weight: 500;
     }
     .panel-head svg { width: 15px; height: 15px; color: var(--text3); }
     .panel-head .head-icon { color: var(--orange); }
 
-    /* device list */
+    /* DEVICE LIST */
     .device-row {
       display: flex; align-items: flex-start; gap: 10px;
-      padding: 11px 16px;
-      border-bottom: 1px solid var(--border);
-      transition: background 0.1s;
+      padding: 11px 16px; border-bottom: 1px solid var(--border); transition: background 0.1s;
     }
     .device-row:last-child { border-bottom: none; }
     .device-row:hover { background: var(--surface2); }
     .dot { width: 8px; height: 8px; min-width: 8px; border-radius: 50%; margin-top: 5px; }
     .dot-on { background: var(--green); box-shadow: 0 0 6px var(--green); }
     .dot-off { background: var(--text3); }
-    .device-name { font-size: 13px; font-weight: 500; color: var(--text); }
+    .device-name { font-size: 13px; font-weight: 500; }
     .device-meta { font-size: 11px; color: var(--text3); margin-top: 2px; }
-    .net-badge {
-      font-size: 10px; font-weight: 600; padding: 2px 7px;
-      border-radius: 20px; margin-left: 7px; letter-spacing: 0.04em;
-    }
+    .net-badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px; margin-left: 7px; }
     .net-4g { background: var(--green-bg); color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
     .net-off { background: var(--surface3); color: var(--text3); border: 1px solid var(--border); }
     .packets { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
-    .pkt-chip {
-      font-family: 'DM Mono', monospace; font-size: 10px;
-      background: var(--surface3); color: var(--text2);
-      border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px;
-    }
+    .pkt-chip { font-family: 'DM Mono', monospace; font-size: 10px; background: var(--surface3); color: var(--text2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; }
 
-    /* accounts */
+    /* ACCOUNTS */
     .acc-row {
       display: flex; align-items: center; gap: 10px;
-      padding: 11px 16px; border-bottom: 1px solid var(--border);
-      transition: background 0.1s;
+      padding: 11px 16px; border-bottom: 1px solid var(--border); transition: background 0.1s;
     }
     .acc-row:last-child { border-bottom: none; }
     .acc-row:hover { background: var(--surface2); }
@@ -208,58 +264,41 @@
       font-size: 11px; font-weight: 600; color: var(--blue);
     }
     .acc-vpa { font-size: 11px; color: var(--text3); margin-top: 1px; }
-    .acc-name { font-size: 13px; font-weight: 500; color: var(--text); }
+    .acc-name { font-size: 13px; font-weight: 500; }
     .acc-bal { margin-left: auto; font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; color: var(--green); }
     .cache-note { padding: 8px 16px; font-size: 11px; color: var(--text3); border-top: 1px solid var(--border); }
 
-    /* tx table */
+    /* TX TABLE */
     .tx-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
-    th {
-      font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
-      color: var(--text3); font-weight: 600; padding: 10px 14px;
-      border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap;
-    }
-    td { padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); white-space: nowrap; }
+    th { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); font-weight: 600; padding: 10px 14px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+    td { padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 13px; white-space: nowrap; }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: var(--surface2); }
     .tx-id { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text3); }
     .tx-amt { font-family: 'DM Mono', monospace; font-weight: 500; color: var(--green); }
     .tx-time { font-size: 11px; color: var(--text3); }
     .st { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; }
-    .st-SETTLED { background: var(--green-bg); color: var(--green); }
-    .st-REJECTED { background: var(--red-bg); color: var(--red); }
-    .st-DUPLICATE_DROPPED { background: var(--amber-bg); color: var(--amber); }
-    .st-INVALID { background: var(--red-bg); color: var(--red); }
+    .st-SETTLED  { background: var(--green-bg); color: var(--green); }
+    .st-REJECTED { background: var(--red-bg);   color: var(--red); }
 
-    /* log */
+    /* LOG */
     .log-box {
-      background: #0A0A0C;
-      border-radius: var(--radius-lg);
-      border: 1px solid var(--border);
-      padding: 14px 16px;
-      font-family: 'DM Mono', monospace;
-      font-size: 12px;
-      color: var(--text2);
-      max-height: 200px; overflow-y: auto;
-      line-height: 1.8;
+      background: #0A0A0C; border-radius: var(--radius-lg);
+      border: 1px solid var(--border); padding: 14px 16px;
+      font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text2);
+      max-height: 220px; overflow-y: auto; line-height: 1.8;
     }
-    .log-time { color: var(--orange); }
-    .log-dim { color: var(--text3); }
+    .log-time   { color: var(--orange); }
+    .log-purple { color: var(--purple); }
+    .log-green  { color: var(--green); }
+    .log-red    { color: var(--red); }
+    .log-dim    { color: var(--text3); }
 
-    /* full-width bottom panels */
     .panel-full { margin-bottom: 16px; }
-
-    /* empty */
     .empty { padding: 28px; text-align: center; color: var(--text3); font-size: 13px; }
+    .divider { height: 1px; background: var(--border); margin: 16px 0; }
 
-    /* divider line in step */
-    .step-divider {
-      width: 1px; background: var(--border);
-      height: 16px; margin-left: 12px; margin-top: -6px; margin-bottom: -6px;
-    }
-
-    /* scrollbar */
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 2px; }
@@ -285,11 +324,95 @@
         <span class="tag">Encrypted</span>
         <span class="tag">Idempotent</span>
         <span class="tag">Gossip Protocol</span>
+        <span class="tag purple">Double-Spend Protected</span>
       </div>
     </div>
   </div>
 
-  <!-- FLOW CARD -->
+  <div class="section-label">⬡ Double Spend Prevention</div>
+
+  <div class="token-card">
+    <div class="token-header">
+      <div class="token-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+          <line x1="1" y1="10" x2="23" y2="10"/>
+        </svg>
+      </div>
+      <div>
+        <div class="token-title">Spend Token</div>
+        <div class="token-subtitle">Issue a token while online → embed in payment → prevents double-spend offline</div>
+      </div>
+    </div>
+
+    <!-- Issue token form -->
+    <div class="step">
+      <div class="step-num purple">A</div>
+      <div class="step-body">
+        <div class="step-title">Issue a spend token (simulate going online before payment)</div>
+        <div class="input-line">
+          <select id="tokenSenderVpa">
+            <option>ShubhamTiwari@demo</option>
+            <option>Sarvesh@demo</option>
+            <option>Rushabh@demo</option>
+          </select>
+          <div class="rupee-wrap">
+            <span class="rupee-prefix">₹</span>
+            <input type="number" id="tokenAmount" value="500">
+          </div>
+          <button class="btn btn-purple" onclick="issueToken()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            Issue Token
+          </button>
+        </div>
+
+        <!-- Nonce result box -->
+        <div class="nonce-box" id="nonceBox">
+          <div class="nonce-label">✓ Token Issued — Nonce (embed this in your payment)</div>
+          <div class="nonce-value" id="nonceValue">—</div>
+          <div class="nonce-meta" id="nonceMeta">—</div>
+          <div class="nonce-actions">
+            <button class="btn btn-purple" onclick="useThisToken()" style="font-size:12px;padding:5px 11px;">
+              ↓ Auto-fill in payment below
+            </button>
+            <button class="btn btn-ghost" onclick="checkTokenStatus()" style="font-size:12px;padding:5px 11px;">
+              Check status
+            </button>
+          </div>
+        </div>
+
+        <div class="step-note" style="margin-top:8px;">
+          Server checks: balance − already_reserved ≥ requested amount. Two tokens on same balance → second one fails.
+        </div>
+      </div>
+    </div>
+
+    <!-- Double spend test -->
+    <div class="step">
+      <div class="step-num purple">B</div>
+      <div class="step-body">
+        <div class="step-title">Test double-spend — try issuing a second token on same balance</div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" onclick="testDoubleIssue()" style="font-size:12px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Try second token (should fail)
+          </button>
+          <span class="step-note">Uses same sender + same amount → expects insufficient_balance_for_reservation</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active tokens list -->
+    <div class="divider"></div>
+    <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;color:var(--text3);text-transform:uppercase;margin-bottom:10px;">Active tokens</div>
+    <div id="tokenList"><div style="font-size:12px;color:var(--text3);">No active tokens yet. Issue one above.</div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       ORIGINAL FLOW (with token nonce field added)
+  ═══════════════════════════════════════════════════════ -->
+  <div class="section-label">⬡ Payment Flow</div>
+
   <div class="flow-card">
     <div class="flow-label">Flow</div>
 
@@ -297,7 +420,7 @@
     <div class="step">
       <div class="step-num">1</div>
       <div class="step-body">
-        <div class="step-title">Compose payment</div>
+        <div class="step-title">Compose payment (with spend token)</div>
         <div class="input-line">
           <select id="senderVpa">
             <option>ShubhamTiwari@demo</option>
@@ -319,9 +442,32 @@
             <span class="pin-label">PIN</span>
             <input type="text" id="pin" value="1234" maxlength="4">
           </div>
+        </div>
+
+        <!-- Token nonce field -->
+        <div style="margin-top:10px;">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:5px;">
+            Spend Token Nonce
+            <span style="color:var(--purple);font-weight:500;"> — issue above then click "Auto-fill"</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="spendTokenNonce" placeholder="paste nonce here or use auto-fill"
+                   style="width:340px;font-family:'DM Mono',monospace;font-size:11px;">
+            <button class="btn btn-ghost" onclick="clearNonce()" style="font-size:11px;padding:5px 10px;">Clear</button>
+          </div>
+          <div class="warning-banner" id="noTokenWarning" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            No spend token attached! Payment will be REJECTED by server — this is the double-spend protection working.
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
           <button class="btn btn-orange" onclick="sendPacket()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-            Inject
+            Inject into Mesh
+          </button>
+          <button class="btn btn-ghost" onclick="sendPacketNoToken()" style="margin-left:8px;font-size:12px;">
+            Inject WITHOUT token (test rejection)
           </button>
         </div>
       </div>
@@ -351,13 +497,12 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M10.54 16.1a6 6 0 0 1 2.92 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
             Upload to backend
           </button>
-          <span class="step-note">parallel · exercises idempotency</span>
+          <span class="step-note">Token validated on server → CONSUMED or REJECTED</span>
         </div>
       </div>
     </div>
 
-    <!-- Reset -->
-    <div style="margin-top: 6px; padding-top: 16px; border-top: 1px solid var(--border);">
+    <div style="padding-top:16px;border-top:1px solid var(--border);">
       <button class="btn btn-danger" onclick="resetMesh()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         Reset mesh + cache
@@ -394,10 +539,7 @@
     <div class="tx-wrap">
       <table>
         <thead>
-        <tr>
-          <th>ID</th><th>From</th><th>To</th><th>Amount</th>
-          <th>Status</th><th>Bridge</th><th>Hops</th><th>Settled</th>
-        </tr>
+        <tr><th>ID</th><th>From</th><th>To</th><th>Amount</th><th>Status</th><th>Bridge</th><th>Hops</th><th>Settled</th></tr>
         </thead>
         <tbody id="tx-body"></tbody>
       </table>
@@ -406,8 +548,8 @@
   </div>
 
   <!-- LOG -->
-  <div class="panel-head" style="padding: 0 0 10px; border: none; color: var(--text2); font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em;">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+  <div class="panel-head" style="padding:0 0 10px;border:none;color:var(--text2);font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.1em;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
     Activity log
   </div>
   <div class="log-box" id="log"></div>
@@ -415,47 +557,250 @@
 </div>
 
 <script>
-  function log(msg) {
+  // ── State ─────────────────────────────────────────────
+  let lastIssuedNonce = null;
+  let lastIssuedSender = null;
+
+  // ── Logging ───────────────────────────────────────────
+  function log(msg, type) {
     const el = document.getElementById('log');
-    const t = new Date().toLocaleTimeString('en-IN', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+    const t = new Date().toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
     const line = document.createElement('div');
-    line.innerHTML = '<span class="log-time">[' + t + ']</span> <span>' + msg + '</span>';
+    const colorMap = { purple:'log-purple', green:'log-green', red:'log-red', dim:'log-dim' };
+    const cls = colorMap[type] || '';
+    line.innerHTML = `<span class="log-time">[${t}]</span> <span class="${cls}">${msg}</span>`;
     el.prepend(line);
   }
 
-  function initials(vpa) {
-    return vpa.split('@')[0].substring(0, 2).toUpperCase();
+  function initials(vpa) { return vpa.split('@')[0].substring(0,2).toUpperCase(); }
+  function shortName(vpa) { return vpa.split('@')[0]; }
+
+  // ── Token: Issue ──────────────────────────────────────
+  async function issueToken() {
+    const senderVpa = document.getElementById('tokenSenderVpa').value;
+    const amount    = parseFloat(document.getElementById('tokenAmount').value);
+
+    log(`Issuing token: ${senderVpa} → ₹${amount}`, 'purple');
+
+    try {
+      const r = await fetch('/api/token/issue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ senderVpa, amount })
+      }).then(r => r.json());
+
+      if (!r.success) {
+        log(`✗ Token issue FAILED: ${r.reason}`, 'red');
+        return;
+      }
+
+      lastIssuedNonce  = r.nonce;
+      lastIssuedSender = senderVpa;
+
+      document.getElementById('nonceValue').textContent = r.nonce;
+      document.getElementById('nonceMeta').textContent =
+        `Reserved ₹${r.reservedAmount} for ${senderVpa}  ·  Expires: ${new Date(r.expiresAt).toLocaleTimeString('en-IN')}`;
+      document.getElementById('nonceBox').classList.add('visible');
+
+      log(`✓ Token issued! nonce: ${r.nonce.substring(0,16)}...`, 'green');
+      log(`  Reserved ₹${r.reservedAmount} · expires ${new Date(r.expiresAt).toLocaleTimeString('en-IN')}`, 'dim');
+
+      refreshTokenList(senderVpa);
+    } catch(e) {
+      log(`Error: ${e.message}`, 'red');
+    }
   }
 
-  function shortName(vpa) {
-    return vpa.split('@')[0];
+  // ── Token: Auto-fill into payment ─────────────────────
+  function useThisToken() {
+    if (!lastIssuedNonce) return;
+    document.getElementById('spendTokenNonce').value = lastIssuedNonce;
+    // Match sender
+    const sel = document.getElementById('senderVpa');
+    for (let i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === lastIssuedSender) { sel.selectedIndex = i; break; }
+    }
+    // Match amount
+    document.getElementById('amount').value = document.getElementById('tokenAmount').value;
+    document.getElementById('noTokenWarning').style.display = 'none';
+    log('Token nonce auto-filled into payment form', 'purple');
   }
 
+  function clearNonce() {
+    document.getElementById('spendTokenNonce').value = '';
+    document.getElementById('noTokenWarning').style.display = 'none';
+  }
+
+  // ── Token: Check status ───────────────────────────────
+  async function checkTokenStatus() {
+    if (!lastIssuedNonce) return;
+    try {
+      const r = await fetch(`/api/token/status/${lastIssuedNonce}`).then(r => r.json());
+      log(`Token status: ${r.status} · nonce: ${r.nonce.substring(0,16)}...`, 'purple');
+      if (r.consumedAt) log(`  Consumed at: ${new Date(r.consumedAt).toLocaleTimeString('en-IN')} · packet: ${r.consumedByPacketHash.substring(0,16)}...`, 'dim');
+    } catch(e) { log('Token not found', 'red'); }
+  }
+
+  // ── Token: Test double-issue ──────────────────────────
+  async function testDoubleIssue() {
+    const senderVpa = document.getElementById('tokenSenderVpa').value;
+    const amount    = parseFloat(document.getElementById('tokenAmount').value);
+    log(`Testing double-issue: second ₹${amount} token for ${senderVpa}`, 'purple');
+    try {
+      const r = await fetch('/api/token/issue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ senderVpa, amount })
+      }).then(r => r.json());
+
+      if (!r.success) {
+        log(`✓ Second token correctly REJECTED: ${r.reason}`, 'green');
+      } else {
+        log(`Second token issued (balance was sufficient for both)`, 'dim');
+      }
+    } catch(e) { log(`Error: ${e.message}`, 'red'); }
+  }
+
+  // ── Token: Refresh list ───────────────────────────────
+  async function refreshTokenList(senderVpa) {
+    if (!senderVpa) senderVpa = document.getElementById('tokenSenderVpa').value;
+    try {
+      const tokens = await fetch(`/api/token/active/${senderVpa}`).then(r => r.json());
+      const el = document.getElementById('tokenList');
+      if (!tokens || tokens.length === 0) {
+        el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No active tokens for this sender.</div>';
+        return;
+      }
+      el.innerHTML = tokens.map(t => `
+        <div class="token-row">
+          <span class="token-badge badge-${t.status}">${t.status}</span>
+          <div>
+            <div class="token-nonce">${t.nonce.substring(0,20)}...</div>
+            <div class="token-vpa">${t.senderVpa}</div>
+          </div>
+          <div class="token-amount">₹${parseFloat(t.reservedAmount).toFixed(2)}</div>
+        </div>
+      `).join('');
+    } catch(e) {}
+  }
+
+  // ── Send packet WITH token ────────────────────────────
+  async function sendPacket() {
+    const nonce = document.getElementById('spendTokenNonce').value.trim();
+    if (!nonce) {
+      document.getElementById('noTokenWarning').style.display = 'flex';
+      log('No spend token nonce — payment will be rejected on settlement', 'red');
+    }
+
+    const body = {
+      senderVpa:       document.getElementById('senderVpa').value,
+      receiverVpa:     document.getElementById('receiverVpa').value,
+      amount:          parseFloat(document.getElementById('amount').value),
+      pin:             document.getElementById('pin').value,
+      ttl:             5,
+      startDevice:     'phone-shubham',
+      spendTokenNonce: nonce || null
+    };
+
+    try {
+      const r = await fetch('/api/demo/send', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      }).then(r => r.json());
+
+      log(`Packet ${r.packetId.substring(0,8)} encrypted & injected (TTL ${r.ttl})`);
+      log(`spendTokenNonce: ${r.spendTokenNonce}`, 'dim');
+      refresh();
+    } catch(e) { log(`Error: ${e.message}`, 'red'); }
+  }
+
+  // ── Send packet WITHOUT token (test rejection) ────────
+  async function sendPacketNoToken() {
+    const body = {
+      senderVpa:       document.getElementById('senderVpa').value,
+      receiverVpa:     document.getElementById('receiverVpa').value,
+      amount:          parseFloat(document.getElementById('amount').value),
+      pin:             document.getElementById('pin').value,
+      ttl:             5,
+      startDevice:     'phone-shubham',
+      spendTokenNonce: null
+    };
+    log('Injecting packet WITHOUT spend token (expect REJECTED on flush)', 'red');
+    try {
+      const r = await fetch('/api/demo/send', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      }).then(r => r.json());
+      log(`Packet ${r.packetId.substring(0,8)} injected — flush to see REJECTED`, 'dim');
+      refresh();
+    } catch(e) { log(`Error: ${e.message}`, 'red'); }
+  }
+
+  // ── Gossip ────────────────────────────────────────────
+  async function gossip() {
+    try {
+      const r = await fetch('/api/mesh/gossip', {method:'POST'}).then(r => r.json());
+      log(`Gossip: ${r.transfers} transfer(s) — ${JSON.stringify(r.deviceCounts)}`);
+      refresh();
+    } catch(e) { log(`Error: ${e.message}`, 'red'); }
+  }
+
+  // ── Flush ─────────────────────────────────────────────
+  async function flushBridges() {
+    try {
+      const r = await fetch('/api/mesh/flush', {method:'POST'}).then(r => r.json());
+      log(`${r.uploadsAttempted} bridge upload(s) attempted`);
+      (r.results || []).forEach(res => {
+        const type = res.outcome === 'SETTLED' ? 'green' : res.outcome === 'DUPLICATE_DROPPED' ? 'dim' : 'red';
+        log(`${res.bridgeNode} → ${res.packetId} → ${res.outcome}${res.reason ? ' ('+res.reason+')' : ''}`, type);
+      });
+      refresh();
+      refreshTokenList();
+      if (lastIssuedNonce) checkTokenStatus();
+    } catch(e) { log(`Error: ${e.message}`, 'red'); }
+  }
+
+  // ── Reset ─────────────────────────────────────────────
+  async function resetMesh() {
+    try {
+      await fetch('/api/mesh/reset', {method:'POST'});
+      log('Mesh + idempotency cache cleared');
+      lastIssuedNonce  = null;
+      lastIssuedSender = null;
+      document.getElementById('nonceBox').classList.remove('visible');
+      document.getElementById('spendTokenNonce').value = '';
+      document.getElementById('tokenList').innerHTML =
+        '<div style="font-size:12px;color:var(--text3);">No active tokens yet. Issue one above.</div>';
+      refresh();
+    } catch(e) { log(`Error: ${e.message}`, 'red'); }
+  }
+
+  // ── Refresh dashboard data ────────────────────────────
   async function refresh() {
+    // Mesh state
     try {
       const m = await fetch('/api/mesh/state').then(r => r.json());
       const devDiv = document.getElementById('devices-list');
-      if (!m.devices || m.devices.length === 0) {
-        devDiv.innerHTML = '<div class="empty">No devices in mesh</div>';
-      } else {
-        devDiv.innerHTML = m.devices.map(d => `
-          <div class="device-row">
-            <div class="dot ${d.hasInternet ? 'dot-on' : 'dot-off'}"></div>
-            <div style="flex:1;min-width:0;">
-              <div class="device-name">
-                ${d.deviceId}
-                <span class="net-badge ${d.hasInternet ? 'net-4g' : 'net-off'}">${d.hasInternet ? '4G' : 'OFFLINE'}</span>
-              </div>
-              <div class="device-meta">${d.packetCount} packet${d.packetCount === 1 ? '' : 's'}</div>
-              ${d.packetIds && d.packetIds.length > 0 ? `<div class="packets">${d.packetIds.map(id => `<span class="pkt-chip">${id.substring(0,8)}</span>`).join('')}</div>` : ''}
+      devDiv.innerHTML = (m.devices||[]).map(d => `
+        <div class="device-row">
+          <div class="dot ${d.hasInternet ? 'dot-on' : 'dot-off'}"></div>
+          <div style="flex:1;min-width:0;">
+            <div class="device-name">
+              ${d.deviceId}
+              <span class="net-badge ${d.hasInternet ? 'net-4g' : 'net-off'}">${d.hasInternet ? '4G' : 'OFFLINE'}</span>
             </div>
+            <div class="device-meta">${d.packetCount} packet${d.packetCount===1?'':'s'}</div>
+            ${d.packetIds&&d.packetIds.length>0
+              ? `<div class="packets">${d.packetIds.map(id=>`<span class="pkt-chip">${id}</span>`).join('')}</div>`
+              : ''}
           </div>
-        `).join('');
-      }
+        </div>
+      `).join('') || '<div class="empty">No devices</div>';
       document.getElementById('cacheInfo').textContent =
-        'Idempotency cache: ' + (m.idempotencyCacheSize || 0) + ' entr' + (m.idempotencyCacheSize === 1 ? 'y' : 'ies');
-    } catch (e) {}
+        `Idempotency cache: ${m.idempotencyCacheSize||0} entr${m.idempotencyCacheSize===1?'y':'ies'}`;
+    } catch(e) {}
 
+    // Accounts
     try {
       const accs = await fetch('/api/accounts').then(r => r.json());
       document.getElementById('accounts-list').innerHTML = accs.map(a => `
@@ -468,20 +813,20 @@
           <div class="acc-bal">₹${parseFloat(a.balance).toFixed(2)}</div>
         </div>
       `).join('');
-    } catch (e) {}
+    } catch(e) {}
 
+    // Transactions
     try {
       const txs = await fetch('/api/transactions').then(r => r.json());
       const tbody = document.getElementById('tx-body');
       const empty = document.getElementById('tx-empty');
-      if (!txs || txs.length === 0) {
-        tbody.innerHTML = '';
-        empty.style.display = '';
+      if (!txs||txs.length===0) {
+        tbody.innerHTML = ''; empty.style.display = '';
       } else {
         empty.style.display = 'none';
         tbody.innerHTML = txs.map(t => `
           <tr>
-            <td class="tx-id">${t.id.substring(0, 8)}</td>
+            <td class="tx-id">${t.id}</td>
             <td>${shortName(t.senderVpa)}</td>
             <td>${shortName(t.receiverVpa)}</td>
             <td class="tx-amt">₹${parseFloat(t.amount).toFixed(2)}</td>
@@ -492,56 +837,10 @@
           </tr>
         `).join('');
       }
-    } catch (e) {}
+    } catch(e) {}
   }
 
-  async function sendPacket() {
-    const body = {
-      senderVpa: document.getElementById('senderVpa').value,
-      receiverVpa: document.getElementById('receiverVpa').value,
-      amount: parseFloat(document.getElementById('amount').value),
-      pin: document.getElementById('pin').value,
-      ttl: 5,
-      startDevice: 'phone-shubham'
-    };
-    try {
-      const r = await fetch('/api/demo/send', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      }).then(r => r.json());
-      log('Packet ' + r.packetId.substring(0, 8) + ' encrypted & injected (TTL ' + r.ttl + ')');
-      log('<span class="log-dim">ciphertext: ' + r.ciphertextPreview + '</span>');
-      refresh();
-    } catch (e) { log('Error: ' + e.message); }
-  }
-
-  async function gossip() {
-    try {
-      const r = await fetch('/api/mesh/gossip', { method: 'POST' }).then(r => r.json());
-      log('Gossip: ' + r.transfers + ' transfer(s) — ' + JSON.stringify(r.deviceCounts));
-      refresh();
-    } catch (e) { log('Error: ' + e.message); }
-  }
-
-  async function flushBridges() {
-    try {
-      const r = await fetch('/api/mesh/flush', { method: 'POST' }).then(r => r.json());
-      log(r.uploadsAttempted + ' bridge upload(s) attempted');
-      (r.results || []).forEach(res => {
-        log(res.bridgeNode + ' → packet ' + res.packetId + ' → ' + res.outcome + (res.reason ? ' (' + res.reason + ')' : ''));
-      });
-      refresh();
-    } catch (e) { log('Error: ' + e.message); }
-  }
-
-  async function resetMesh() {
-    try {
-      await fetch('/api/mesh/reset', { method: 'POST' });
-      log('Mesh + idempotency cache cleared');
-      refresh();
-    } catch (e) { log('Error: ' + e.message); }
-  }
-
+  // ── Init ──────────────────────────────────────────────
   refresh();
   setInterval(refresh, 3000);
 </script>

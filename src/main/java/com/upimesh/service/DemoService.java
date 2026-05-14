@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 @Service
 @Slf4j
 public class DemoService {
+
   @Autowired private AccountRepository accounts;
   @Autowired private HybridCryptoService crypto;
   @Autowired private ServerKeyHolder serverKey;
@@ -29,8 +30,7 @@ public class DemoService {
   @PostConstruct
   public void seedAccount() {
     if (accounts.count() == 0) {
-      accounts.save(
-          new Account("ShubhamTiwari@demo", "Shubham Tiwari", new BigDecimal("2000000.00")));
+      accounts.save(new Account("ShubhamTiwari@demo", "Shubham Tiwari", new BigDecimal("2000000.00")));
       accounts.save(new Account("Sarvesh@demo", "Sarvesh", new BigDecimal("70000.00")));
       accounts.save(new Account("Rushabh@demo", "Rushabh", new BigDecimal("80000.00")));
       accounts.save(new Account("Sudarshan@demo", "Sudarshan", new BigDecimal("90000.00")));
@@ -39,26 +39,23 @@ public class DemoService {
   }
 
   /**
-   * Simulates the sender's phone: 1. Build a PaymentInstruction with a fresh nonce + signedAt
-   * timestamp. 2. Encrypt with the server's public key (hybrid RSA+AES). 3. Wrap in a MeshPacket
-   * with TTL.
-   *
-   * <p>In a real Android app, this exact code (minus the server-side reference) would run on the
-   * phone. The phone would have already cached the server's public key during a previous online
-   * session.
+   * UPDATED: now accepts spendTokenNonce.
+   * The nonce is embedded inside PaymentInstruction before encryption,
+   * so it is invisible to intermediaries and tamper-proof.
    */
   public MeshPacket createPacket(
-      String senderVpa, String receiverVpa, BigDecimal amount, String pin, int ttl)
-      throws Exception {
+          String senderVpa, String receiverVpa,
+          BigDecimal amount, String pin,
+          int ttl, String spendTokenNonce) throws Exception {
 
-    PaymentInstruction instruction =
-        new PaymentInstruction(
+    PaymentInstruction instruction = new PaymentInstruction(
             senderVpa,
             receiverVpa,
             amount,
             sha256Hex(pin),
-            UUID.randomUUID().toString(),
-            Instant.now().toEpochMilli());
+            UUID.randomUUID().toString(),  // payment nonce
+            Instant.now().toEpochMilli(),
+            spendTokenNonce);              // spend token nonce
 
     String ciphertext = crypto.encrypt(instruction, serverKey.getPublicKey());
 

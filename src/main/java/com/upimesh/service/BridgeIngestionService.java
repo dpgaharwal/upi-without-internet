@@ -5,6 +5,8 @@ import com.upimesh.entity.MeshPacket;
 import com.upimesh.entity.PaymentInstruction;
 import com.upimesh.entity.Transaction;
 import java.time.Instant;
+
+import com.upimesh.enums.Status;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -65,6 +67,9 @@ public class BridgeIngestionService {
       }
 
       Transaction tx = settlement.settle(instruction, packetHash, bridgeNodeId, hopCount);
+      if (tx.getStatus() == Status.REJECTED) {
+        return IngestResult.invalid(packetHash, "rejected: " + tx.getStatus().name());
+      }
       return IngestResult.settled(packetHash, tx);
     } catch (Exception e) {
       log.error("Ingestion error: {}", e.getMessage(), e);
