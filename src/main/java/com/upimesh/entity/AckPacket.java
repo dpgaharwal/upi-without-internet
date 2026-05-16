@@ -6,19 +6,22 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Problem 6 — Offline Receiver Acknowledgement
+ * Receiver ka signed receipt jo mesh mein reverse direction mein travel karta hai.
  *
- * Signed receipt that travels back through the mesh from receiver to sender.
+ * <p>Flow kuch aisa hai:
+ * <ol>
+ *   <li>Receiver ka device payment packet receive karta hai (decrypt nahi kar sakta —
+ *       woh server ki private key se hi hoga). Lekin packet mila yeh confirm karne ke
+ *       liye ek ack sign karta hai.</li>
+ *   <li>{@link com.upimesh.service.AckService} receiver ki RSA private key se
+ *       {@code packetId|receiverVpa|timestamp} sign karta hai.</li>
+ *   <li>Yeh AckPacket mesh mein ulta travel karta hai — receiver se sender ke device tak.</li>
+ *   <li>Sender {@link com.upimesh.crypto.ReceiverKeyHolder} se receiver ki public key lekar
+ *       signature verify karta hai.</li>
+ * </ol>
  *
- * Flow:
- *   1. Receiver decrypts nothing (they can't — it's encrypted for server).
- *      But they DO receive the packet and sign an ack proving "I got this".
- *   2. ReceiverKeyHolder holds a per-VPA RSA keypair (generated at demo startup).
- *   3. AckService.createAck() signs (packetId + receiverVpa + timestamp) with
- *      the receiver's private key and stores it on the receiver's VirtualDevice.
- *   4. Gossip propagates AckPackets back toward the sender device.
- *   5. Any device can verify the ack via POST /api/mesh/ack/gossip.
- *   6. GET /api/acks/{packetId} returns all known acks — sender checks these.
+ * <p>Iska faayda: bina internet ke bhi sender ko confirmation mil jaata hai ki receiver
+ * tak packet pahuncha — settlement hone se pehle bhi.
  */
 @Getter
 @Setter
@@ -26,21 +29,24 @@ import lombok.Setter;
 @AllArgsConstructor
 public class AckPacket {
 
-    /** The original MeshPacket ID being acknowledged. */
-    private String packetId;
+  /** Original payment packet ka ID jiska yeh ack hai. */
+  private String packetId;
 
-    /** VPA of the device that received the payment packet. */
-    private String receiverVpa;
+  /** Woh VPA jisne yeh ack sign kiya. */
+  private String receiverVpa;
 
-    /**
-     * RSA-SHA256 signature over: packetId + "|" + receiverVpa + "|" + timestamp
-     * Base64-encoded. Verified using ReceiverKeyHolder's public key for receiverVpa.
-     */
-    private String signature;
+  /**
+   * RSA-SHA256 signature over: {@code packetId + "|" + receiverVpa + "|" + timestamp}.
+   * Base64-encoded. Receiver ki public key se verify hota hai.
+   */
+  private String signature;
 
-    /** Epoch millis when the ack was created. */
-    private long timestamp;
+  /** Jab ack create hua epoch milliseconds mein. */
+  private long timestamp;
 
-    /** How many more hops this ack can travel (starts at 5, decremented on each hop). */
-    private int ttl;
+  /**
+   * Remaining hops. Har hop pe ek se kam hota hai.
+   * Zero hone par aage nahi bheja jaata.
+   */
+  private int ttl;
 }

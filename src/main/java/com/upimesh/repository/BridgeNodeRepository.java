@@ -7,14 +7,17 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 /**
- *  Spring Data JPA repo for BridgeNode.
+ * {@link BridgeNode} entity ke liye Spring Data JPA repository.
+ *
+ * <p>Primary key {@code nodeId} (String) hai. Dashboard display ke liye
+ * active aur revoked bridges alag-alag fetch karne ke custom methods hain.
  */
 @Repository
 public interface BridgeNodeRepository extends JpaRepository<BridgeNode, String> {
 
-    /** All non-revoked bridges (for dashboard display). */
+    /** Dashboard ke liye — sirf active (non-revoked) bridges return karta hai. */
     List<BridgeNode> findByRevokedFalse();
 
-    /** All revoked bridges. */
+    /** Audit ke liye — sirf revoked bridges return karta hai. */
     List<BridgeNode> findByRevokedTrue();
 }

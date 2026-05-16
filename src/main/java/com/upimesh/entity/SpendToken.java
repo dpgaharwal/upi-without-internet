@@ -17,36 +17,31 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * A signed offline spend token.
+ * Ek offline spend token — double-spend prevention ka core mechanism.
  *
- * <p>When a user goes online they call POST /api/token/issue. The server:
- *   1. Checks the sender has sufficient balance.
- *   2. Creates a SpendToken that RESERVES that amount (balance is not yet debited —
- *      reservation is tracked in the token row).
- *   3. Returns the token's nonce to the client. The client embeds the nonce inside
- *      the PaymentInstruction before encrypting, so the nonce lives inside the
- *      ciphertext — tamper-proof.
+ * <p>Jab user offline jaane se pehle online hota hai, server ek token issue karta hai.
+ * Server us waqt check karta hai ki {@code balance - already_reserved >= requestedAmount}.
+ * Token ka {@code nonce} sender ke phone ko milta hai jo usse {@link PaymentInstruction}
+ * ke andar encrypt karke embed karta hai.
  *
- * <p>On ingest the server calls SpendTokenService.consume(nonce, senderVpa, amount).
- * Exactly one thread wins (unique index on nonce + status=ACTIVE check). If the
- * token is already CONSUMED or EXPIRED, settlement is rejected.
+ * <p>Settlement ke waqt server {@code consume()} call karta hai. {@code nonce} pe unique
+ * index hai aur {@code status = ACTIVE} check hai isliye exactly ek hi thread consume
+ * kar sakta hai — doosra ya to {@code CONSUMED} status dekhega ya constraint violation
+ * paayega. Dono cases mein doosra settle nahi hoga.
  *
- * <p>This kills the double-spend scenario: Shubham has ₹500. He issues a token for
- * ₹500, embeds the nonce in packet-A (to Sarvesh) and tries to embed the SAME nonce
- * in packet-B (to Rushabh). Packet-A settles → token CONSUMED. Packet-B arrives →
- * consume() returns false → REJECTED("spend_token_invalid").
- *
- * <p>If he issues two separate tokens, each for ₹500, that requires two online
- * sessions where the server checks balance twice — the second issuance fails if
- * balance is already reserved.
+ * <p>Lifecycle:
+ * <pre>
+ *   ACTIVE  --[payment settled]-->  CONSUMED
+ *   ACTIVE  --[time expired]----->  EXPIRED
+ * </pre>
  */
 @Entity
 @Table(
-        name = "spend_tokens",
-        indexes = {
-                @Index(name = "idx_token_nonce", columnList = "nonce", unique = true),
-                @Index(name = "idx_token_vpa_status", columnList = "senderVpa, status")
-        })
+    name = "spend_tokens",
+    indexes = {
+      @Index(name = "idx_token_nonce", columnList = "nonce", unique = true),
+      @Index(name = "idx_token_vpa_status", columnList = "senderVpa, status")
+    })
 @Getter
 @Setter
 @NoArgsConstructor
@@ -57,43 +52,45 @@ public class SpendToken {
     private Long id;
 
     /**
-     * The secret value embedded inside the encrypted PaymentInstruction.
-     * UUID, globally unique. This is what the server checks on ingest.
+     * Encrypted PaymentInstruction ke andar embed hone wala secret value.
+     * UUID, globally unique. Server ingest ke waqt yahi check karta hai.
      */
     @Column(nullable = false, unique = true, length = 36)
     private String nonce;
 
+    /** Sender ka VPA jisne yeh token issue karwaya. */
     @Column(nullable = false)
     private String senderVpa;
 
     /**
-     * The amount this token authorises. The server checks that the actual
-     * payment amount matches exactly — a token for ₹500 cannot settle ₹501.
+     * Is token se authorize hone wala exact amount.
+     * Server check karta hai ki actual payment amount exactly match kare —
+     * ₹500 ka token ₹501 settle nahi kar sakta.
      */
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal reservedAmount;
 
-    /** When the token was issued. */
+    /** Jab token issue hua tha. */
     @Column(nullable = false)
     private Instant issuedAt;
 
     /**
-     * Tokens expire after this time. Default TTL is 24 hours (same as packet
-     * max-age), so an expired token and a stale packet are rejected together.
+     * Is time ke baad token expire ho jaata hai. Default 24 ghante —
+     * packet ki max-age ke barabar, isliye dono saath reject honge.
      */
     @Column(nullable = false)
     private Instant expiresAt;
 
-    /** ACTIVE → CONSUMED (settled) or EXPIRED (eviction job). */
+    /** Token ki current state: {@code ACTIVE}, {@code CONSUMED}, ya {@code EXPIRED}. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TokenStatus status;
 
-    /** Set when the token is consumed during settlement. */
+    /** Jab token settlement mein consume hua — audit ke liye. */
     @Column
     private Instant consumedAt;
 
-    /** The packetHash that consumed this token (for audit trail). */
+    /** Wo packetHash jisne token consume kiya — traceability ke liye. */
     @Column(length = 64)
     private String consumedByPacketHash;
 

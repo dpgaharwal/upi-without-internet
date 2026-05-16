@@ -14,21 +14,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Where the actual ledger update happens. Wrapped in a DB transaction so either BOTH the debit and
- * credit happen, or neither does.
+ * Actual ledger update yahan hota hai — paisa sender se receiver ko jaata hai.
  *
- * <p>The @Version column on Account gives us optimistic locking — if two threads somehow get past
- * idempotency and both try to debit the same account, the second one will fail with
- * OptimisticLockException rather than corrupting the balance. (In a demo the idempotency layer
- * should always catch this first, but defense in depth.)
+ * <p>Pura operation ek DB transaction mein wrapped hai: ya to debit aur credit
+ * dono hote hain, ya koi bhi nahi hota.
  *
- *  Before touching balances, we call SpendTokenService.consume().
- *  * If the token is missing, already consumed, expired, or mismatched,
- *  * we record a REJECTED transaction and return early — no money moves.
- *  *
- *  * This is the server-side gate that makes double-spend impossible:
- *  * two packets with the same spendTokenNonce → first one consumes the
- *  * token → second one finds status=CONSUMED → rejected immediately.
+ * <p>{@code Account} pe {@code @Version} column optimistic locking deta hai.
+ * Agar do threads somehow idempotency layer se nikal ke ek saath same account
+ * debit karne ki koshish karein, to doosra {@code OptimisticLockException}
+ * throw karega — balance corrupt nahi hoga. Defense in depth.
+ *
+ * <p>Balance touch karne se pehle {@link SpendTokenService#consume} call hota hai.
+ * Agar token missing, already consumed, expired, ya amount mismatch ho to
+ * REJECTED transaction record hota hai aur koi paisa nahi hilta.
  */
 @Service
 @Slf4j
@@ -38,6 +36,16 @@ public class SettlementService {
   @Autowired private TransactionRepository transactions;
   @Autowired private SpendTokenService spendTokenService; // NEW
 
+  /**
+   * Payment instruction settle karo — spend token validate karo, balance check karo,
+   * debit/credit atomically karo, aur transaction record save karo.
+   *
+   * @param instruction decrypted payment details
+   * @param packetHash  SHA-256 of ciphertext — idempotency aur audit ke liye
+   * @param bridgeNodeId jis bridge ne packet upload kiya
+   * @param hopCount    kitne hops mein packet aaya (analytics)
+   * @return saved {@link Transaction} — {@code SETTLED} ya {@code REJECTED} status ke saath
+   */
   @Transactional
   public Transaction settle(
           PaymentInstruction instruction, String packetHash,
@@ -102,6 +110,10 @@ public class SettlementService {
     return tx;
   }
 
+  /**
+   * REJECTED transaction record karo bina koi paisa move kiye.
+   * Audit trail ke liye reason log kiya jaata hai.
+   */
   private Transaction recordRejected(
           PaymentInstruction instruction, String packetHash,
           String bridgeNodeId, int hopCount, String reason) {

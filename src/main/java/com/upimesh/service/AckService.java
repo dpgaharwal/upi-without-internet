@@ -16,20 +16,22 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Problem 6 — Offline Receiver Acknowledgement Service.
+ * Offline receiver acknowledgement manage karta hai.
  *
- * Three responsibilities:
- *  1. createAck()     — receiver device signs a receipt for a packet it received.
- *  2. verifyAck()     — anyone can verify a signature is authentic.
- *  3. gossipAcks()    — propagate acks back through the mesh (reverse direction).
+ * <p>Teen kaam karta hai:
+ * <ol>
+ *   <li>{@link #createAck} — receiver device packet receive karne par signed receipt banata hai.</li>
+ *   <li>{@link #verifyAck} — koi bhi signature authentic hai ya nahi check kar sakta hai.</li>
+ *   <li>{@link #gossipAcks} — acks mesh mein ulti direction mein propagate karta hai
+ *       (receiver se sender ki taraf).</li>
+ * </ol>
  *
- * The signing material is: packetId + "|" + receiverVpa + "|" + timestamp
- * Algorithm: SHA256withRSA
+ * <p>Signing material: {@code packetId + "|" + receiverVpa + "|" + timestamp}
+ * Algorithm: {@code SHA256withRSA}
  *
- * Why this matters:
- *   Without acks, Shubham sends ₹500 offline → gets zero confirmation until both
- *   go online. With acks, Sarvesh's phone signs a receipt the moment it holds the
- *   packet, and that receipt hops back to Shubham even before anyone reaches a bridge.
+ * <p>Bina ack ke sender ko tab tak koi confirmation nahi milta jab tak dono online na aa jayein.
+ * Ack ke saath receiver ka device packet milte hi receipt sign karta hai aur woh gossip se sender
+ * tak pahunch jaata hai — settlement se pehle bhi.
  */
 @Service
 @Slf4j
@@ -38,21 +40,18 @@ public class AckService {
     @Autowired private ReceiverKeyHolder keyHolder;
     @Autowired private MeshSimulatorService mesh;
 
-    // Global store: packetId -> list of acks (multiple receivers might ack the same packet)
+    /** Global store: packetId → acks ki list (multiple receivers ack kar sakte hain). */
     private final Map<String, List<AckPacket>> ackStore = new ConcurrentHashMap<>();
 
-    // ── Create ────────────────────────────────────────────────────────────────
-
     /**
-     * Called when a VirtualDevice "receives" a payment packet.
-     * Signs an AckPacket with the receiver's private key and stores it locally.
+     * Payment packet receive karne par receiver device se signed ack banao.
      *
-     * In real life: phone B receives packet over BLE, immediately signs an ack
-     * with its local private key, stores the ack in its local DB.
+     * <p>Real life mein: phone B BLE se packet receive karta hai, turant apni local
+     * private key se ack sign karta hai aur local DB mein store karta hai.
      *
-     * @param packetId   the MeshPacket ID being acknowledged
-     * @param receiverVpa VPA of the acknowledging device
-     * @return the signed AckPacket, or null if VPA has no keypair
+     * @param packetId    acknowledge karne wale packet ka ID
+     * @param receiverVpa ack karne wale device ka VPA
+     * @return signed {@link AckPacket}, ya {@code null} agar VPA ka keypair nahi hai
      */
     public AckPacket createAck(String packetId, String receiverVpa) {
         if (!keyHolder.hasKey(receiverVpa)) {
@@ -91,14 +90,13 @@ public class AckService {
         }
     }
 
-    // ── Verify ───────────────────────────────────────────────────────────────
-
     /**
-     * Verifies the signature on an AckPacket.
-     * Returns true only if the signature is valid for the stated receiverVpa.
+     * AckPacket ka signature verify karo.
+     * Sirf tab {@code true} return hoga jab signature stated {@code receiverVpa} ke
+     * liye valid ho — receiver ki public key se check hota hai.
      *
-     * This is what Shubham's phone does when it receives an ack from Sarvesh:
-     * it checks the sig against Sarvesh's known public key.
+     * @param ack verify karne wala ack packet
+     * @return {@code true} agar signature valid hai
      */
     public boolean verifyAck(AckPacket ack) {
         if (!keyHolder.hasKey(ack.getReceiverVpa())) {
@@ -125,12 +123,12 @@ public class AckService {
         }
     }
 
-    // ── Gossip ───────────────────────────────────────────────────────────────
-
     /**
-     * Propagates AckPackets from devices that hold them to all other devices.
-     * Mirrors gossipOnce() in MeshSimulatorService but for ack direction (receiver → sender).
-     * Decrements ack TTL on each hop.
+     * Acks ko mesh mein propagate karo — receiver se sender ki taraf (ulti direction).
+     * {@link MeshSimulatorService#gossipOnce()} jaisa hai lekin ack packets ke liye.
+     * Har hop pe ack TTL ek se kam hota hai.
+     *
+     * @return kitne ack transfers hue is gossip round mein
      */
     public int gossipAcks() {
         int transfers = 0;
@@ -169,29 +167,40 @@ public class AckService {
         return transfers;
     }
 
-    // ── Query ─────────────────────────────────────────────────────────────────
-
-    /** Returns all acks for a given packetId (from any receiver). */
+    /**
+     * Ek packet ke saare acks return karo (kisi bhi receiver se).
+     * Sender yeh call karke confirm karta hai ki payment kisi ne receive ki.
+     *
+     * @param packetId jis packet ke acks chahiye
+     * @return ack packets ki list, empty agar koi nahi mila
+     */
     public List<AckPacket> getAcksForPacket(String packetId) {
         return ackStore.getOrDefault(packetId, List.of());
     }
 
-    /** Returns all acks in the store (for dashboard). */
+    /**
+     * Store ke saare acks return karo — dashboard display ke liye.
+     *
+     * @return packetId to ack list ka map
+     */
     public Map<String, List<AckPacket>> getAllAcks() {
         return ackStore;
     }
 
+    /** Ack store completely clear karo — mesh reset ke waqt use hota hai. */
     public void clear() {
         ackStore.clear();
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
+    /**
+     * VPA ke hisaab se receiver ka virtual device dhundho.
+     * Demo convention: pehla non-bridge offline device use hota hai.
+     * Real system mein: receiver device khud hi local hota, yeh lookup nahi lagta.
+     *
+     * @param vpa receiver ka VPA
+     * @return matching {@link VirtualDevice}, ya {@code null} agar nahi mila
+     */
     private VirtualDevice findDeviceForVpa(String vpa) {
-        // Map VPA to device ID by convention (demo only)
-        // e.g. "Sarvesh@demo" -> some device. We pick the first non-bridge offline device
-        // In real system: the receiver device IS the phone; this would be local.
-        return mesh.getDevices().stream()
                 .filter(d -> !d.hasInternet())
                 .filter(d -> !d.getDeviceId().equals("phone-shubham"))
                 .findFirst()

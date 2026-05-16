@@ -13,6 +13,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+/**
+ * In-process mesh simulator — virtual devices aur gossip propagation manage karta hai.
+ *
+ * <p>Real system mein yeh sab physical Android phones pe hota Android BLE GATT ke zariye.
+ * Yahan sab kuch ek JVM ke andar simulate hota hai demo ke liye — koi hardware nahi chahiye.
+ *
+ * <p>Default 5 devices:
+ * <ul>
+ *   <li>{@code phone-shubham} — sender (no internet)</li>
+ *   <li>{@code phone-stranger1/2/3} — intermediate hops (no internet)</li>
+ *   <li>{@code phone-bridge} — internet-connected bridge node</li>
+ * </ul>
+ */
 @Service
 @Slf4j
 public class MeshSimulatorService {
@@ -37,6 +50,13 @@ public class MeshSimulatorService {
   public Collection<VirtualDevice> getDevices() { return devices.values(); }
   public VirtualDevice getDevice(String id)      { return devices.get(id); }
 
+  /**
+   * Kisi device pe ek packet inject karo — payment flow ka starting point.
+   *
+   * @param senderDeviceId jis device pe packet start hoga
+   * @param packet         inject karne wala packet
+   * @throws IllegalArgumentException agar device ID unknown hai
+   */
   public void inject(String senderDeviceId, MeshPacket packet) {
     VirtualDevice sender = devices.get(senderDeviceId);
     if (sender == null) throw new IllegalArgumentException("Unknown device: " + senderDeviceId);
@@ -45,6 +65,13 @@ public class MeshSimulatorService {
             packet.getPacketId().substring(0, 8), senderDeviceId, packet.getTtl());
   }
 
+  /**
+   * Ek gossip round simulate karo — har device jo packet hold kar raha hai woh
+   * baaki saare devices ko bhejta hai (TTL > 0 wale packets hi).
+   * Har copy pe TTL ek se kam hota hai.
+   *
+   * @return gossip result — kitne transfers hue aur har device pe packet count
+   */
   public GossipResult gossipOnce() {
     int transfers = 0;
     List<VirtualDevice> deviceList = new ArrayList<>(devices.values());
@@ -79,16 +106,11 @@ public class MeshSimulatorService {
   }
 
   /**
-   * Collect all packets from internet-connected devices for flushing.
+   * Internet-connected devices se saare packets collect karo server upload ke liye.
+   * Har upload ke saath HMAC signature attach hoti hai — bridge identity verify karne ke liye.
+   * Agar bridge registered nahi hai to auto-register hota hai demo ke liye.
    *
-   * Problem 7 change: each BridgeUpload now carries an HMAC signature.
-   * The simulator acts as a "legitimate bridge" that has registered with
-   * nodeId = deviceId (e.g. "phone-bridge") and knows the HMAC secret.
-   *
-   * If the bridge device is not registered, the upload carries an empty
-   * signature and will be rejected by /api/bridge/ingest (unless you use
-   * the internal bridge.ingest() path which skips auth — that's intentional
-   * so the /api/mesh/flush endpoint can auto-register the demo bridge).
+   * @return bridge uploads ki list, har ek mein packet aur uski HMAC signature
    */
   public List<BridgeUpload> collectBridgeUploads() {
     List<BridgeUpload> out = new ArrayList<>();
@@ -103,12 +125,14 @@ public class MeshSimulatorService {
   }
 
   /**
-   * Sign the ciphertext with the HMAC secret of the bridge node.
-   * If the bridge is not registered, auto-register it with a demo secret
-   * so the simulator "just works" out of the box without manual registration.
+   * Bridge node ke HMAC secret se ciphertext sign karo.
+   * Agar bridge registered nahi hai to pehle deterministic demo secret se auto-register karo
+   * taaki simulator manually register kiye bina kaam kare.
+   * Production mein: bridge ka secret provisioning ke waqt set hota hai.
    *
-   * In production: the bridge would have its secret pre-provisioned.
-   * Here: we auto-register on first flush so the demo is frictionless.
+   * @param nodeId     bridge ka device ID
+   * @param ciphertext sign karne wala ciphertext
+   * @return base64-encoded HMAC signature, ya empty string agar failure
    */
   private String computeSignatureForUpload(String nodeId, String ciphertext) {
     try {
@@ -144,11 +168,22 @@ public class MeshSimulatorService {
     }
   }
 
+  /**
+   * Check karo ki yeh bridge node registered hai ya nahi.
+   *
+   * @param nodeId check karne wala node ID
+   * @return {@code true} agar registered hai
+   */
   private boolean bridgeNodeRegistered(String nodeId) {
     return bridgeAuthService.listAll().stream()
             .anyMatch(n -> n.getNodeId().equals(nodeId));
   }
 
+  /**
+   * Har device pe abhi kitne packets hain uska snapshot lo — dashboard ke liye.
+   *
+   * @return deviceId to packet count ka map
+   */
   public Map<String, Integer> snapshotMap() {
     Map<String, Integer> m = new LinkedHashMap<>();
     for (VirtualDevice d : devices.values()) {
@@ -157,10 +192,25 @@ public class MeshSimulatorService {
     return m;
   }
 
+  /** Mesh reset karo — saare devices ke packets aur acks clear ho jaate hain. */
   public void resetMesh() {
     devices.values().forEach(VirtualDevice::clear);
   }
 
+  /**
+   * Gossip round ka result.
+   *
+   * @param transfers    kitne packet transfers hue
+   * @param deviceCounts har device pe packet count
+   */
   public record GossipResult(int transfers, Map<String, Integer> deviceCounts) {}
+
+  /**
+   * Bridge upload — ek packet aur uski HMAC signature.
+   *
+   * @param bridgeNodeId upload karne wala bridge
+   * @param packet       upload karne wala mesh packet
+   * @param hmacSignature ciphertext ka HMAC-SHA256 signature
+   */
   public record BridgeUpload(String bridgeNodeId, MeshPacket packet, String hmacSignature) {}
 }

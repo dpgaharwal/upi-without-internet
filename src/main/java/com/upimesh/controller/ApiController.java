@@ -18,12 +18,18 @@ import com.upimesh.service.AckService;
 import com.upimesh.service.BridgeAuthService;
 
 /**
- * Public REST surface.
+ * Pura public REST surface — dashboard aur bridge nodes dono yahi use karte hain.
  *
- * <p>The endpoints split into three groups: /api/server-key → so simulated senders can fetch the
- * server's public key /api/mesh/* → simulator endpoints (inject, gossip, flush) /api/bridge/ingest
- * → THE real production endpoint a real bridge node would hit /api/accounts, /api/transactions →
- * for the dashboard
+ * <p>Endpoints teen groups mein hain:
+ * <ul>
+ *   <li>{@code /api/server-key} — simulated sender devices server ki public key fetch karte hain.</li>
+ *   <li>{@code /api/token/*} — spend token issue, status check, active list.</li>
+ *   <li>{@code /api/demo/send} — simulated payment packet banao aur mesh mein inject karo.</li>
+ *   <li>{@code /api/mesh/*} — simulator endpoints: state, gossip, flush, reset, ack.</li>
+ *   <li>{@code /api/bridge/*} — bridge node registration, ingest, revoke, list.</li>
+ *   <li>{@code /api/accounts}, {@code /api/transactions} — dashboard display ke liye.</li>
+ *   <li>{@code /api/acks/*} — receiver acknowledgement create, gossip, verify, query.</li>
+ * </ul>
  */
 @RestController
 @RequestMapping("/api")
@@ -40,6 +46,12 @@ public class ApiController {
   @Autowired private AckService ackService;
   @Autowired private BridgeAuthService bridgeAuthService;
 
+  /**
+   * Server ki RSA-2048 public key return karo.
+   * Simulated sender devices ise payment encrypt karne ke liye use karte hain.
+   *
+   * @return public key base64 mein, algorithm info ke saath
+   */
   @GetMapping("/server-key")
   public Map<String, String> getServerPublicKey() {
     return Map.of(
@@ -49,12 +61,14 @@ public class ApiController {
   }
 
   /**
-   * Issue a spend token.
-   * The client calls this while online, gets the nonce back,
-   * then embeds it in every PaymentInstruction created offline.
+   * Sender ke liye ek spend token issue karo.
+   * Online session mein call hota hai — nonce milta hai jo payment mein embed hota hai.
    *
-   * POST /api/token/issue
-   * Body: { "senderVpa": "ShubhamTiwari@demo", "amount": 500.00 }
+   * <p>{@code POST /api/token/issue}
+   * Body: {@code { "senderVpa": "ShubhamTiwari@demo", "amount": 500.00 }}
+   *
+   * @param req sender VPA aur amount
+   * @return nonce aur expiry (success), ya reason (fail)
    */
   @PostMapping("/token/issue")
   public ResponseEntity<?> issueToken(@RequestBody TokenIssueRequest req) {
@@ -76,8 +90,12 @@ public class ApiController {
   }
 
   /**
-   * Check the current status of a token by its nonce.
-   * GET /api/token/status/{nonce}
+   * Nonce se token ki current status check karo — dashboard ke liye.
+   *
+   * <p>{@code GET /api/token/status/{nonce}}
+   *
+   * @param nonce token ka nonce
+   * @return token details ya 404
    */
   @GetMapping("/token/status/{nonce}")
   public ResponseEntity<?> tokenStatus(@PathVariable String nonce) {
@@ -98,16 +116,26 @@ public class ApiController {
   }
 
   /**
-   * List all ACTIVE tokens for a sender.
-   * GET /api/token/active/{senderVpa}
+   * Ek sender ke saare active tokens list karo.
+   *
+   * <p>{@code GET /api/token/active/{senderVpa}}
+   *
+   * @param senderVpa sender ka VPA
+   * @return active tokens ki list
    */
   @GetMapping("/token/active/{senderVpa}")
   public List<SpendToken> activeTokens(@PathVariable String senderVpa) {
     return spendTokenService.getTokensForSender(senderVpa);
   }
 
-  // ── Demo send (updated to accept spendTokenNonce) ─────────────────────────
-
+  /**
+   * Simulated payment packet banao aur mesh mein inject karo.
+   *
+   * <p>{@code POST /api/demo/send}
+   *
+   * @param req payment details — sender, receiver, amount, PIN, optional token nonce
+   * @return packet ID, ciphertext preview, aur injection info
+   */
   @PostMapping("/demo/send")
   public ResponseEntity<?> demoSend(@RequestBody DemoSendRequest req) throws Exception {
 
@@ -135,12 +163,13 @@ public class ApiController {
             "maxHops",          maxHops));
   }
 
-  //  Request/response shapes
+  /** Token issue request body — sender VPA aur amount. */
   public static class TokenIssueRequest {
     public String senderVpa;
     public BigDecimal amount;
   }
 
+  /** Demo send request body — poori payment details. */
   public static class DemoSendRequest {
     public String senderVpa;
     public String receiverVpa;
@@ -152,8 +181,7 @@ public class ApiController {
     public Integer maxHops;
   }
 
-  // Mesh endpoints
-
+  /** Mesh ka current state return karo — har device pe packet count aur IDs. */
   @GetMapping("/mesh/state")
   public Map<String, Object> meshState() {
     List<Map<String, Object>> deviceData = new ArrayList<>();
@@ -169,12 +197,17 @@ public class ApiController {
             "idempotencyCacheSize", idempotency.size());
   }
 
+  /** Ek gossip round simulate karo — saare devices ek doosre ko packets bhejte hain. */
   @PostMapping("/mesh/gossip")
   public Map<String, Object> meshGossip() {
     MeshSimulatorService.GossipResult r = mesh.gossipOnce();
     return Map.of("transfers", r.transfers(), "deviceCounts", r.deviceCounts());
   }
 
+  /**
+   * Internet-connected devices ke packets server ko upload karo.
+   * Har upload pe bridge auth verify hoti hai pehle.
+   */
   @PostMapping("/mesh/flush")
   public Map<String, Object> meshFlush() {
     List<MeshSimulatorService.BridgeUpload> uploads = mesh.collectBridgeUploads();
@@ -206,6 +239,7 @@ public class ApiController {
     return Map.of("uploadsAttempted", uploads.size(), "results", results);
   }
 
+  /** Mesh aur idempotency cache reset karo — fresh demo start ke liye. */
   @PostMapping("/mesh/reset")
   public Map<String, Object> meshReset() {
     mesh.resetMesh();
@@ -214,6 +248,18 @@ public class ApiController {
     return Map.of("status", "mesh and idempotency cache cleared");
   }
 
+  /**
+   * Real bridge node yeh endpoint call karta hai packet upload karne ke liye.
+   * Bridge auth verify hoti hai pehle — unknown ya revoked bridge 403 paata hai.
+   *
+   * <p>{@code POST /api/bridge/ingest}
+   * Headers: {@code X-Bridge-Node-Id}, {@code X-Bridge-Signature}
+   *
+   * @param packet      mesh packet body
+   * @param bridgeNodeId bridge ka node ID header se
+   * @param signature   HMAC signature header se
+   * @return ingestion result — {@code SETTLED}, {@code DUPLICATE_DROPPED}, ya {@code INVALID}
+   */
   @PostMapping("/bridge/ingest")
   public ResponseEntity<?> ingest(
           @RequestBody MeshPacket packet,
@@ -235,12 +281,15 @@ public class ApiController {
   }
 
   /**
-   * Register a bridge node.
-   * POST /api/bridge/register
-   * Body: { "nodeId": "bridge-prod-1", "hmacSecret": "<base64 of >=32 bytes>" }
+   * Bridge node register karo — ek baar online mein call hota hai.
+   * Bridge apna secret generate karta hai, register karta hai, aur phir
+   * har upload pe usi secret se sign karta hai.
    *
-   * The bridge generates its own secret (e.g. SecureRandom 32 bytes → base64),
-   * registers once while online, then uses the same secret to sign every upload.
+   * <p>{@code POST /api/bridge/register}
+   * Body: {@code { "nodeId": "bridge-prod-1", "hmacSecret": "<base64 >=32 bytes>" }}
+   *
+   * @param req nodeId aur hmacSecret
+   * @return registration result
    */
   @PostMapping("/bridge/register")
   public ResponseEntity<?> registerBridge(@RequestBody BridgeRegisterRequest req) {
@@ -261,8 +310,12 @@ public class ApiController {
   }
 
   /**
-   * Revoke a bridge node — all future uploads from it will be rejected.
-   * POST /api/bridge/revoke/{nodeId}
+   * Bridge node revoke karo — iske baad us bridge ke saare uploads 403 se reject honge.
+   *
+   * <p>{@code POST /api/bridge/revoke/{nodeId}}
+   *
+   * @param nodeId revoke karne wala bridge ID
+   * @return revocation result
    */
   @PostMapping("/bridge/revoke/{nodeId}")
   public ResponseEntity<?> revokeBridge(@PathVariable String nodeId) {
@@ -275,8 +328,11 @@ public class ApiController {
   }
 
   /**
-   * List all registered bridges (active + revoked).
-   * GET /api/bridge/nodes
+   * Saare registered bridges list karo — active aur revoked dono.
+   *
+   * <p>{@code GET /api/bridge/nodes}
+   *
+   * @return bridge nodes ki list
    */
   @GetMapping("/bridge/nodes")
   public ResponseEntity<?> listBridges() {
@@ -288,12 +344,15 @@ public class ApiController {
   }
 
   /**
-   * Receiver device calls this to create + store a signed ack for a packet it received.
-   * POST /api/mesh/ack/create
-   * Body: { "packetId": "...", "receiverVpa": "Sarvesh@demo" }
+   * Receiver device ek packet ke liye signed ack create karo.
+   * Real system mein yeh automatically BLE pe packet aane par hota.
+   * Yahan dashboard se manually call karte hain simulate karne ke liye.
    *
-   * In real system: called automatically on the receiver's phone when a packet arrives via BLE.
-   * Here: called manually from dashboard to simulate receiver acknowledging.
+   * <p>{@code POST /api/mesh/ack/create}
+   * Body: {@code { "packetId": "...", "receiverVpa": "Sarvesh@demo" }}
+   *
+   * @param req packetId aur receiverVpa
+   * @return created ack ka preview
    */
   @PostMapping("/mesh/ack/create")
   public ResponseEntity<?> createAck(@RequestBody AckCreateRequest req) {
@@ -313,8 +372,11 @@ public class ApiController {
   }
 
   /**
-   * Propagate acks one gossip round back through the mesh (receiver → sender direction).
-   * POST /api/mesh/ack/gossip
+   * Acks ko mesh mein reverse direction mein propagate karo (receiver se sender ki taraf).
+   *
+   * <p>{@code POST /api/mesh/ack/gossip}
+   *
+   * @return kitne ack transfers hue
    */
   @PostMapping("/mesh/ack/gossip")
   public Map<String, Object> gossipAcks() {
@@ -323,8 +385,14 @@ public class ApiController {
   }
 
   /**
-   * Get all acks for a specific packet (sender uses this to confirm payment was received).
-   * GET /api/acks/{packetId}
+   * Ek packet ke saare signed acks return karo.
+   * Sender yeh call karke confirm karta hai ki payment receive hui.
+   * Har ack pe signature validity bhi check hoti hai.
+   *
+   * <p>{@code GET /api/acks/{packetId}}
+   *
+   * @param packetId jis packet ke acks chahiye
+   * @return acks ki list signature validity ke saath
    */
   @GetMapping("/acks/{packetId}")
   public ResponseEntity<?> getAcks(@PathVariable String packetId) {
@@ -346,9 +414,13 @@ public class ApiController {
   }
 
   /**
-   * Verify a specific ack signature. Used by sender to confirm authenticity.
-   * POST /api/acks/verify
+   * Ek specific ack signature verify karo — sender authenticity confirm karne ke liye.
+   *
+   * <p>{@code POST /api/acks/verify}
    * Body: AckPacket JSON
+   *
+   * @param ack verify karne wala ack packet
+   * @return signature validity result
    */
   @PostMapping("/acks/verify")
   public Map<String, Object> verifyAck(@RequestBody AckPacket ack) {
@@ -360,21 +432,25 @@ public class ApiController {
   }
 
 
+  /** Dashboard ke liye saare demo accounts aur unke balances return karo. */
   @GetMapping("/accounts")
   public List<Account> listAccounts() {
     return accountRepo.findAll();
   }
 
+  /** Dashboard ke liye latest 20 transactions return karo — newest pehle. */
   @GetMapping("/transactions")
   public List<Transaction> listTransactions() {
     return txRepo.findTop20ByOrderByIdDesc();
   }
 
+  /** Bridge registration request body. */
   public static class BridgeRegisterRequest {
     public String nodeId;
     public String hmacSecret;
   }
 
+  /** Ack create request body. */
   public static class AckCreateRequest {
     public String packetId;
     public String receiverVpa;

@@ -10,23 +10,22 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Bridge node identity.
+ * Ek registered bridge node ki identity.
  *
- * Each bridge that wants to call /api/bridge/ingest must first register via
- * POST /api/bridge/register. The server stores its publicKey.
+ * <p>Jo bhi device {@code /api/bridge/ingest} call karna chahta hai use pehle
+ * {@code POST /api/bridge/register} se register karna padta hai. Server us node ka
+ * {@code hmacSecret} store karta hai.
  *
- * On every upload, the bridge HMAC-SHA256 signs the packet ciphertext with its
- * secret key (derived from its keypair or a shared secret set at registration).
- * The server verifies using the stored publicKey. If signature is wrong or the
- * nodeId is revoked, the upload is rejected.
+ * <p>Har upload pe bridge ciphertext ka {@code HMAC-SHA256(ciphertext, hmacSecret)}
+ * compute karke {@code X-Bridge-Signature} header mein bhejta hai. Server same HMAC
+ * recompute karke match karta hai. Agar mismatch ho ya nodeId unknown ho to upload
+ * reject ho jaata hai.
  *
- * Fields:
- *   nodeId       — the X-Bridge-Node-Id header value. Chosen by the bridge at registration.
- *   publicKey    — base64-encoded RSA public key (or HMAC shared secret, base64).
- *                  We use HMAC-SHA256 with a shared secret for simplicity:
- *                  registration sends the secret, server stores it, bridge uses it to sign.
- *   registeredAt — when it registered.
- *   revoked      — if true, all uploads from this nodeId are rejected with 403.
+ * <p>Revocation: {@code revoked = true} set karne ke baad us bridge ke saare future
+ * uploads 403 se reject honge bina processing ke.
+ *
+ * <p>Note: Yahan symmetric HMAC shared secret use kiya gaya hai simplicity ke liye.
+ * Production mein asymmetric keys (bridge private, server public) zyada secure honge.
  */
 @Entity
 @Table(name = "bridge_nodes")
@@ -35,32 +34,34 @@ import lombok.Setter;
 @NoArgsConstructor
 public class BridgeNode {
 
-    @Id
-    @Column(nullable = false, length = 128)
-    private String nodeId;
+  /** Bridge ka unique identifier. {@code X-Bridge-Node-Id} header mein aata hai. */
+  @Id
+  @Column(nullable = false, length = 128)
+  private String nodeId;
 
-    /**
-     * HMAC-SHA256 shared secret, base64-encoded.
-     * Bridge knows this secret; uses it to sign each upload.
-     * Server stores it to verify.
-     *
-     * In production: use asymmetric keys (bridge holds private, server holds public).
-     * HMAC is simpler for this demo and equally tamper-proof.
-     */
-    @Column(nullable = false, length = 512)
-    private String hmacSecret;
+  /**
+   * HMAC-SHA256 shared secret, base64-encoded, minimum 32 bytes.
+   * Bridge yahi secret use karke har upload sign karta hai.
+   * Server yahi stored secret se verify karta hai.
+   */
+  @Column(nullable = false, length = 512)
+  private String hmacSecret;
 
-    @Column(nullable = false)
-    private Instant registeredAt;
+  /** Jab bridge ne register kiya tha. */
+  @Column(nullable = false)
+  private Instant registeredAt;
 
-    /** When true, all uploads from this node are rejected. Enables per-bridge revocation. */
-    @Column(nullable = false)
-    private boolean revoked = false;
+  /**
+   * Agar {@code true} hai to is bridge ke saare uploads reject honge.
+   * Compromised bridges ko revoke karne ke liye use hota hai.
+   */
+  @Column(nullable = false)
+  private boolean revoked = false;
 
-    public BridgeNode(String nodeId, String hmacSecret, Instant registeredAt) {
-        this.nodeId = nodeId;
-        this.hmacSecret = hmacSecret;
-        this.registeredAt = registeredAt;
-        this.revoked = false;
-    }
+  public BridgeNode(String nodeId, String hmacSecret, Instant registeredAt) {
+    this.nodeId = nodeId;
+    this.hmacSecret = hmacSecret;
+    this.registeredAt = registeredAt;
+    this.revoked = false;
+  }
 }
