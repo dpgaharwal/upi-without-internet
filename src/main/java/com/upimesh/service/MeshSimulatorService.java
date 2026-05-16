@@ -10,11 +10,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 @Slf4j
 public class MeshSimulatorService {
+
+  @Autowired
+  private BridgeAuthService bridgeAuthService;
 
   public MeshSimulatorService() {
     seedDefaultDevices();
@@ -37,9 +41,8 @@ public class MeshSimulatorService {
     VirtualDevice sender = devices.get(senderDeviceId);
     if (sender == null) throw new IllegalArgumentException("Unknown device: " + senderDeviceId);
     sender.hold(packet);
-    log.info("Packet {} injected at {} (TTL={}, hopCount={})",
-            packet.getPacketId().substring(0, 8), senderDeviceId,
-            packet.getTtl(), packet.getHopCount());
+    log.info("Packet {} injected at {} (TTL={})",
+            packet.getPacketId().substring(0, 8), senderDeviceId, packet.getTtl());
   }
 
   public GossipResult gossipOnce() {
@@ -75,15 +78,75 @@ public class MeshSimulatorService {
     return new GossipResult(transfers, snapshotMap());
   }
 
+  /**
+   * Collect all packets from internet-connected devices for flushing.
+   *
+   * Problem 7 change: each BridgeUpload now carries an HMAC signature.
+   * The simulator acts as a "legitimate bridge" that has registered with
+   * nodeId = deviceId (e.g. "phone-bridge") and knows the HMAC secret.
+   *
+   * If the bridge device is not registered, the upload carries an empty
+   * signature and will be rejected by /api/bridge/ingest (unless you use
+   * the internal bridge.ingest() path which skips auth — that's intentional
+   * so the /api/mesh/flush endpoint can auto-register the demo bridge).
+   */
   public List<BridgeUpload> collectBridgeUploads() {
     List<BridgeUpload> out = new ArrayList<>();
     for (VirtualDevice d : devices.values()) {
       if (!d.hasInternet()) continue;
       for (MeshPacket pkt : d.getHeldPackets()) {
-        out.add(new BridgeUpload(d.getDeviceId(), pkt));
+        String signature = computeSignatureForUpload(d.getDeviceId(), pkt.getCiphertext());
+        out.add(new BridgeUpload(d.getDeviceId(), pkt, signature));
       }
     }
     return out;
+  }
+
+  /**
+   * Sign the ciphertext with the HMAC secret of the bridge node.
+   * If the bridge is not registered, auto-register it with a demo secret
+   * so the simulator "just works" out of the box without manual registration.
+   *
+   * In production: the bridge would have its secret pre-provisioned.
+   * Here: we auto-register on first flush so the demo is frictionless.
+   */
+  private String computeSignatureForUpload(String nodeId, String ciphertext) {
+    try {
+      // Auto-register the demo bridge if not yet registered
+      // (so the simulator works without manual setup)
+      if (!bridgeNodeRegistered(nodeId)) {
+        // Generate a deterministic demo secret: SHA-256(nodeId) → base64
+        // Real bridges would have a proper random secret set at provisioning
+        java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+        byte[] secretBytes = md.digest((nodeId + "-demo-secret").getBytes());
+        // Pad to 32 bytes (SHA-256 already produces 32)
+        String secretBase64 = java.util.Base64.getEncoder().encodeToString(secretBytes);
+        bridgeAuthService.register(nodeId, secretBase64);
+        log.info("Auto-registered demo bridge: nodeId={}", nodeId);
+      }
+
+      // Retrieve the stored secret and compute HMAC
+      com.upimesh.entity.BridgeNode node =
+              bridgeAuthService.listAll().stream()
+                      .filter(n -> n.getNodeId().equals(nodeId))
+                      .findFirst().orElse(null);
+
+      if (node == null || node.isRevoked()) {
+        log.warn("Bridge {} is revoked or missing — upload will fail auth", nodeId);
+        return "";
+      }
+
+      return bridgeAuthService.computeHmac(ciphertext, node.getHmacSecret());
+
+    } catch (Exception e) {
+      log.error("Failed to compute upload signature for bridge {}: {}", nodeId, e.getMessage());
+      return "";
+    }
+  }
+
+  private boolean bridgeNodeRegistered(String nodeId) {
+    return bridgeAuthService.listAll().stream()
+            .anyMatch(n -> n.getNodeId().equals(nodeId));
   }
 
   public Map<String, Integer> snapshotMap() {
@@ -99,5 +162,5 @@ public class MeshSimulatorService {
   }
 
   public record GossipResult(int transfers, Map<String, Integer> deviceCounts) {}
-  public record BridgeUpload(String bridgeNodeId, MeshPacket packet) {}
+  public record BridgeUpload(String bridgeNodeId, MeshPacket packet, String hmacSignature) {}
 }

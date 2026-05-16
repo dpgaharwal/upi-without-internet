@@ -576,6 +576,94 @@
         </div>
     </div>
 
+    <div class="section-label">Problem 6 — Receiver Acknowledgement (Offline Receipt)</div>
+    <div class="flow-card">
+        <div class="flow-label">Signed Ack — Travels back through mesh to sender</div>
+
+        <div class="step">
+            <div class="step-num" style="background:var(--blue);">6</div>
+            <div class="step-body">
+                <div class="step-title">Create Signed Ack (simulate receiver getting the packet)</div>
+                <div class="input-line">
+                    <input type="text" id="ackPacketId" placeholder="Packet ID (full UUID)" style="width:300px;" />
+                    <select id="ackReceiverVpa">
+                        <option value="Sarvesh@demo">Sarvesh@demo</option>
+                        <option value="Rushabh@demo">Rushabh@demo</option>
+                        <option value="Sudarshan@demo">Sudarshan@demo</option>
+                        <option value="ShubhamTiwari@demo">ShubhamTiwari@demo</option>
+                    </select>
+                    <button class="btn btn-blue" onclick="createAck()">Sign Ack</button>
+                </div>
+                <div class="step-note">Receiver's device signs a receipt with its private RSA key. Signature covers: packetId + receiverVpa + timestamp.</div>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-num" style="background:var(--blue);">6b</div>
+            <div class="step-body">
+                <div class="step-title">Gossip Acks (propagate acks back toward sender)</div>
+                <button class="btn btn-blue" onclick="gossipAcks()">Gossip Acks</button>
+                <div class="step-note">Acks hop from receiver's device toward sender's device. Each hop decrements ack TTL.</div>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-num" style="background:var(--blue);">6c</div>
+            <div class="step-body">
+                <div class="step-title">Check Acks for Packet (sender verifies receipt)</div>
+                <div class="input-line">
+                    <input type="text" id="ackCheckPacketId" placeholder="Packet ID" style="width:300px;" />
+                    <button class="btn btn-blue" onclick="checkAcks()">Check Acks</button>
+                </div>
+                <div id="ackResults" style="margin-top:10px;font-size:12px;font-family:'DM Mono',monospace;color:var(--text2);"></div>
+                <div class="step-note">Server returns all signed acks for this packet. Each ack is verified with the receiver's public key.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════════
+         PROBLEM 7 — Bridge Node Identity + HMAC-Signed Uploads
+         ══════════════════════════════════════════════════════════════════════════ -->
+    <div class="section-label">Problem 7 — Bridge Node Identity</div>
+    <div class="flow-card">
+        <div class="flow-label">HMAC-Signed Uploads — Each bridge has a registered identity</div>
+
+        <div class="step">
+            <div class="step-num" style="background:var(--amber);">7</div>
+            <div class="step-body">
+                <div class="step-title">Register a Bridge Node</div>
+                <div class="input-line">
+                    <input type="text" id="bridgeNodeId" placeholder="Node ID e.g. bridge-prod-1" style="width:200px;" />
+                    <input type="text" id="bridgeSecret" placeholder="HMAC secret (base64, ≥32 bytes)" style="width:280px;" />
+                    <button class="btn btn-amber" onclick="registerBridge()">Register</button>
+                    <button class="btn" style="background:var(--surface2);" onclick="genSecret()">Generate Secret</button>
+                </div>
+                <div class="step-note">Bridge calls this once while online. The HMAC secret is stored server-side. Bridge uses same secret to sign every upload.</div>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-num" style="background:var(--amber);">7b</div>
+            <div class="step-body">
+                <div class="step-title">Registered Bridges</div>
+                <button class="btn" style="background:var(--surface2);" onclick="listBridges()">Refresh Bridge List</button>
+                <div id="bridgeList" style="margin-top:10px;"></div>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-num" style="background:var(--red);">7c</div>
+            <div class="step-body">
+                <div class="step-title">Revoke a Bridge Node</div>
+                <div class="input-line">
+                    <input type="text" id="revokeNodeId" placeholder="Node ID to revoke" style="width:220px;" />
+                    <button class="btn btn-red" onclick="revokeBridge()">Revoke</button>
+                </div>
+                <div class="step-note">Revoked bridges get 403 on all future uploads. The demo bridge (phone-bridge) is auto-registered on first flush — revoke it to see upload rejection.</div>
+            </div>
+        </div>
+    </div>
+
     <!-- DEVICES + BALANCES -->
     <div class="grid2">
         <div class="panel">
@@ -936,6 +1024,133 @@
           `).join('');
         }
       } catch(e) {}
+    }
+
+    async function createAck() {
+        const packetId   = document.getElementById('ackPacketId').value.trim();
+        const receiverVpa = document.getElementById('ackReceiverVpa').value;
+        if (!packetId) { log('Enter a packet ID first', 'red'); return; }
+
+        try {
+            const r = await fetch('/api/mesh/ack/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ packetId, receiverVpa })
+            }).then(r => r.json());
+
+            if (r.success) {
+                log(`✓ Ack created: packet=${packetId.substring(0,8)} receiver=${receiverVpa} sig=${r.signaturePreview}`, 'blue');
+                document.getElementById('ackCheckPacketId').value = packetId;
+            } else {
+                log(`✗ Ack failed: ${r.reason}`, 'red');
+            }
+        } catch(e) { log(`Error: ${e.message}`, 'red'); }
+    }
+
+    async function gossipAcks() {
+        try {
+            const r = await fetch('/api/mesh/ack/gossip', { method: 'POST' }).then(r => r.json());
+            log(`Ack gossip: ${r.ackTransfers} ack transfer(s)`, 'blue');
+        } catch(e) { log(`Error: ${e.message}`, 'red'); }
+    }
+
+    async function checkAcks() {
+        const packetId = document.getElementById('ackCheckPacketId').value.trim();
+        if (!packetId) { log('Enter a packet ID', 'red'); return; }
+
+        try {
+            const r = await fetch(`/api/acks/${packetId}`).then(r => r.json());
+            const el = document.getElementById('ackResults');
+            if (!r.acks || r.acks.length === 0) {
+                el.innerHTML = '<span style="color:var(--text3)">No acks found for this packet.</span>';
+                log(`No acks for packet ${packetId.substring(0,8)}`, 'dim');
+                return;
+            }
+            el.innerHTML = r.acks.map(a => `
+      <div style="margin-bottom:8px;padding:8px;background:var(--surface2);border-radius:6px;">
+        <span style="color:var(--blue);font-weight:500;">${a.receiverVpa}</span>
+        &nbsp;|&nbsp;
+        <span style="${a.signatureValid ? 'color:var(--green)' : 'color:var(--red)'}">
+          ${a.signatureValid ? '✓ SIG VALID' : '✗ SIG INVALID'}
+        </span>
+        &nbsp;|&nbsp;TTL ${a.ttl}
+        &nbsp;|&nbsp;<span style="color:var(--text3)">${a.signaturePreview}</span>
+      </div>
+    `).join('');
+            log(`${r.ackCount} ack(s) for packet ${packetId.substring(0,8)}`, 'blue');
+        } catch(e) { log(`Error: ${e.message}`, 'red'); }
+    }
+
+    // ── Problem 7: Bridge functions ───────────────────────────────────────────
+
+    function genSecret() {
+        // Generate a random 32-byte secret client-side, base64-encode it
+        const bytes = new Uint8Array(32);
+        crypto.getRandomValues(bytes);
+        const b64 = btoa(String.fromCharCode(...bytes));
+        document.getElementById('bridgeSecret').value = b64;
+    }
+
+    async function registerBridge() {
+        const nodeId     = document.getElementById('bridgeNodeId').value.trim();
+        const hmacSecret = document.getElementById('bridgeSecret').value.trim();
+        if (!nodeId || !hmacSecret) { log('Node ID and secret required', 'red'); return; }
+
+        try {
+            const r = await fetch('/api/bridge/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nodeId, hmacSecret })
+            }).then(r => r.json());
+
+            if (r.success) {
+                log(`✓ Bridge registered: ${r.nodeId}${r.alreadyExisted ? ' (already existed)' : ''}`, 'green');
+                listBridges();
+            } else {
+                log(`✗ Registration failed: ${r.reason}`, 'red');
+            }
+        } catch(e) { log(`Error: ${e.message}`, 'red'); }
+    }
+
+    async function listBridges() {
+        try {
+            const nodes = await fetch('/api/bridge/nodes').then(r => r.json());
+            const el = document.getElementById('bridgeList');
+            if (!nodes || nodes.length === 0) {
+                el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No bridges registered. Flush packets to auto-register the demo bridge.</div>';
+                return;
+            }
+            el.innerHTML = nodes.map(n => `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--surface2);border-radius:6px;margin-bottom:6px;">
+        <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text);">${n.nodeId}</span>
+        <span style="font-size:11px;color:${n.revoked ? 'var(--red)' : 'var(--green)'};">
+          ${n.revoked ? '✗ REVOKED' : '✓ ACTIVE'}
+        </span>
+        <span style="font-size:11px;color:var(--text3);">${new Date(n.registeredAt).toLocaleTimeString('en-IN')}</span>
+        ${!n.revoked ? `<button class="btn btn-red" style="padding:3px 10px;font-size:11px;" onclick="quickRevoke('${n.nodeId}')">Revoke</button>` : ''}
+      </div>
+    `).join('');
+        } catch(e) {}
+    }
+
+    async function quickRevoke(nodeId) {
+        document.getElementById('revokeNodeId').value = nodeId;
+        await revokeBridge();
+    }
+
+    async function revokeBridge() {
+        const nodeId = document.getElementById('revokeNodeId').value.trim();
+        if (!nodeId) { log('Enter a node ID to revoke', 'red'); return; }
+
+        try {
+            const r = await fetch(`/api/bridge/revoke/${nodeId}`, { method: 'POST' }).then(r => r.json());
+            if (r.success) {
+                log(`✓ Bridge revoked: ${nodeId} — future uploads from this node will get 403`, 'amber');
+                listBridges();
+            } else {
+                log(`✗ Revocation failed: ${r.reason}`, 'red');
+            }
+        } catch(e) { log(`Error: ${e.message}`, 'red'); }
     }
 
     // ── Init ──────────────────────────────────────────────

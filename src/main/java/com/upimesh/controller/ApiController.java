@@ -13,6 +13,9 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.upimesh.entity.AckPacket;
+import com.upimesh.service.AckService;
+import com.upimesh.service.BridgeAuthService;
 
 /**
  * Public REST surface.
@@ -34,6 +37,8 @@ public class ApiController {
   @Autowired private TransactionRepository txRepo;
   @Autowired private IdempotencyService idempotency;
   @Autowired private SpendTokenService spendTokenService;
+  @Autowired private AckService ackService;
+  @Autowired private BridgeAuthService bridgeAuthService;
 
   @GetMapping("/server-key")
   public Map<String, String> getServerPublicKey() {
@@ -176,8 +181,18 @@ public class ApiController {
     List<Map<String, Object>> results = new ArrayList<>();
 
     uploads.parallelStream().forEach(up -> {
-      BridgeIngestionService.IngestResult r =
-              bridge.ingest(up.packet(), up.bridgeNodeId());
+      // P7: verify bridge signature before ingesting
+      BridgeAuthService.VerifyResult auth = bridgeAuthService.verifyUpload(
+              up.bridgeNodeId(), up.hmacSignature(), up.packet().getCiphertext());
+
+      BridgeIngestionService.IngestResult r;
+      if (!auth.success()) {
+        r = BridgeIngestionService.IngestResult.invalid(
+                up.packet().getPacketId(), "bridge_auth_failed: " + auth.reason());
+      } else {
+        r = bridge.ingest(up.packet(), up.bridgeNodeId());
+      }
+
       synchronized (results) {
         results.add(Map.of(
                 "bridgeNode", up.bridgeNodeId(),
@@ -195,17 +210,155 @@ public class ApiController {
   public Map<String, Object> meshReset() {
     mesh.resetMesh();
     idempotency.clear();
+    ackService.clear();
     return Map.of("status", "mesh and idempotency cache cleared");
   }
 
   @PostMapping("/bridge/ingest")
   public ResponseEntity<?> ingest(
           @RequestBody MeshPacket packet,
-          @RequestHeader(value = "X-Bridge-Node-Id", defaultValue = "unknown") String bridgeNodeId) {
-    // X-Hop-Count header REMOVED — untrusted, ignored
+          @RequestHeader(value = "X-Bridge-Node-Id", defaultValue = "unknown") String bridgeNodeId,
+          @RequestHeader(value = "X-Bridge-Signature", defaultValue = "") String signature) {
+
+    // P7: Verify bridge identity + signature BEFORE any processing
+    BridgeAuthService.VerifyResult auth =
+            bridgeAuthService.verifyUpload(bridgeNodeId, signature, packet.getCiphertext());
+
+    if (!auth.success()) {
+      return ResponseEntity.status(403).body(Map.of(
+              "outcome", "REJECTED",
+              "reason", "bridge_auth_failed: " + auth.reason()));
+    }
+
     BridgeIngestionService.IngestResult r = bridge.ingest(packet, bridgeNodeId);
     return ResponseEntity.ok(r);
   }
+
+  /**
+   * Register a bridge node.
+   * POST /api/bridge/register
+   * Body: { "nodeId": "bridge-prod-1", "hmacSecret": "<base64 of >=32 bytes>" }
+   *
+   * The bridge generates its own secret (e.g. SecureRandom 32 bytes → base64),
+   * registers once while online, then uses the same secret to sign every upload.
+   */
+  @PostMapping("/bridge/register")
+  public ResponseEntity<?> registerBridge(@RequestBody BridgeRegisterRequest req) {
+    BridgeAuthService.RegisterResult result =
+            bridgeAuthService.register(req.nodeId, req.hmacSecret);
+
+    if (!result.success()) {
+      return ResponseEntity.badRequest().body(Map.of(
+              "success", false,
+              "reason", result.reason()));
+    }
+
+    return ResponseEntity.ok(Map.of(
+            "success", true,
+            "nodeId", result.node().getNodeId(),
+            "registeredAt", result.node().getRegisteredAt().toString(),
+            "alreadyExisted", result.alreadyExisted()));
+  }
+
+  /**
+   * Revoke a bridge node — all future uploads from it will be rejected.
+   * POST /api/bridge/revoke/{nodeId}
+   */
+  @PostMapping("/bridge/revoke/{nodeId}")
+  public ResponseEntity<?> revokeBridge(@PathVariable String nodeId) {
+    BridgeAuthService.RevokeResult result = bridgeAuthService.revoke(nodeId);
+    if (!result.success()) {
+      return ResponseEntity.badRequest().body(Map.of(
+              "success", false, "reason", result.reason()));
+    }
+    return ResponseEntity.ok(Map.of("success", true, "revokedNodeId", nodeId));
+  }
+
+  /**
+   * List all registered bridges (active + revoked).
+   * GET /api/bridge/nodes
+   */
+  @GetMapping("/bridge/nodes")
+  public ResponseEntity<?> listBridges() {
+    return ResponseEntity.ok(bridgeAuthService.listAll().stream().map(n -> Map.of(
+            "nodeId", n.getNodeId(),
+            "registeredAt", n.getRegisteredAt().toString(),
+            "revoked", n.isRevoked()
+    )).toList());
+  }
+
+  /**
+   * Receiver device calls this to create + store a signed ack for a packet it received.
+   * POST /api/mesh/ack/create
+   * Body: { "packetId": "...", "receiverVpa": "Sarvesh@demo" }
+   *
+   * In real system: called automatically on the receiver's phone when a packet arrives via BLE.
+   * Here: called manually from dashboard to simulate receiver acknowledging.
+   */
+  @PostMapping("/mesh/ack/create")
+  public ResponseEntity<?> createAck(@RequestBody AckCreateRequest req) {
+    AckPacket ack = ackService.createAck(req.packetId, req.receiverVpa);
+    if (ack == null) {
+      return ResponseEntity.badRequest().body(Map.of(
+              "success", false,
+              "reason", "no_keypair_for_vpa: " + req.receiverVpa));
+    }
+    return ResponseEntity.ok(Map.of(
+            "success", true,
+            "packetId", ack.getPacketId(),
+            "receiverVpa", ack.getReceiverVpa(),
+            "timestamp", ack.getTimestamp(),
+            "signaturePreview", ack.getSignature().substring(0, 16) + "...",
+            "ttl", ack.getTtl()));
+  }
+
+  /**
+   * Propagate acks one gossip round back through the mesh (receiver → sender direction).
+   * POST /api/mesh/ack/gossip
+   */
+  @PostMapping("/mesh/ack/gossip")
+  public Map<String, Object> gossipAcks() {
+    int transfers = ackService.gossipAcks();
+    return Map.of("ackTransfers", transfers);
+  }
+
+  /**
+   * Get all acks for a specific packet (sender uses this to confirm payment was received).
+   * GET /api/acks/{packetId}
+   */
+  @GetMapping("/acks/{packetId}")
+  public ResponseEntity<?> getAcks(@PathVariable String packetId) {
+    List<AckPacket> acks = ackService.getAcksForPacket(packetId);
+    if (acks.isEmpty()) {
+      return ResponseEntity.ok(Map.of("packetId", packetId, "acks", List.of()));
+    }
+    return ResponseEntity.ok(Map.of(
+            "packetId", packetId,
+            "ackCount", acks.size(),
+            "acks", acks.stream().map(a -> Map.of(
+                    "receiverVpa", a.getReceiverVpa(),
+                    "timestamp", a.getTimestamp(),
+                    "ttl", a.getTtl(),
+                    "signatureValid", ackService.verifyAck(a),
+                    "signaturePreview", a.getSignature().substring(0, 16) + "..."
+            )).toList()
+    ));
+  }
+
+  /**
+   * Verify a specific ack signature. Used by sender to confirm authenticity.
+   * POST /api/acks/verify
+   * Body: AckPacket JSON
+   */
+  @PostMapping("/acks/verify")
+  public Map<String, Object> verifyAck(@RequestBody AckPacket ack) {
+    boolean valid = ackService.verifyAck(ack);
+    return Map.of(
+            "packetId", ack.getPacketId(),
+            "receiverVpa", ack.getReceiverVpa(),
+            "signatureValid", valid);
+  }
+
 
   @GetMapping("/accounts")
   public List<Account> listAccounts() {
@@ -215,5 +368,15 @@ public class ApiController {
   @GetMapping("/transactions")
   public List<Transaction> listTransactions() {
     return txRepo.findTop20ByOrderByIdDesc();
+  }
+
+  public static class BridgeRegisterRequest {
+    public String nodeId;
+    public String hmacSecret;
+  }
+
+  public static class AckCreateRequest {
+    public String packetId;
+    public String receiverVpa;
   }
 }

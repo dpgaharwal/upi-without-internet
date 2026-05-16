@@ -22,6 +22,10 @@ public class VirtualDevice {
   private final boolean hasInternet;
   private final Map<String, MeshPacket> heldPackets = new ConcurrentHashMap<>();
 
+  // ack store
+  // Key = packetId + "|" + receiverVpa (unique per ack)
+  private final Map<String, AckPacket> heldAcks = new ConcurrentHashMap<>();
+
   public void hold(MeshPacket packet) {
     heldPackets.putIfAbsent(packet.getPacketId(), packet);
   }
@@ -44,5 +48,27 @@ public class VirtualDevice {
 
   public void clear() {
     heldPackets.clear();
+    heldAcks.clear(); // also clear acks on mesh reset
+  }
+
+  /**
+   * Store an ack on this device. Idempotent — same ack won't overwrite.
+   * Key is packetId|receiverVpa so one device can hold acks from multiple receivers.
+   */
+  public void holdAck(AckPacket ack) {
+    String key = ack.getPacketId() + "|" + ack.getReceiverVpa();
+    heldAcks.putIfAbsent(key, ack);
+  }
+
+  public boolean holdsAck(String packetId, String receiverVpa) {
+    return heldAcks.containsKey(packetId + "|" + receiverVpa);
+  }
+
+  public Collection<AckPacket> getHeldAcks() {
+    return heldAcks.values();
+  }
+
+  public int ackCount() {
+    return heldAcks.size();
   }
 }
