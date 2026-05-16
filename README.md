@@ -16,19 +16,20 @@ This repository is the **server-side engine** plus a full in-process mesh simula
 4. [System Architecture](#system-architecture)
 5. [End-to-End Flow](#end-to-end-flow)
 6. [The Three Hard Problems](#the-three-hard-problems)
-7. [Cryptography Deep Dive](#cryptography-deep-dive)
-8. [Idempotency Design](#idempotency-design)
-9. [Settlement Pipeline](#settlement-pipeline)
-10. [Security Considerations](#security-considerations)
-11. [Dashboard Walkthrough](#dashboard-walkthrough)
-12. [API Reference](#api-reference)
-13. [Folder Structure](#folder-structure)
-14. [Running Locally](#running-locally)
-15. [Running Tests](#running-tests)
-16. [Production-Grade Improvements](#production-grade-improvements)
-17. [Real-World Constraints and Limitations](#real-world-constraints-and-limitations)
-18. [Future Enhancements](#future-enhancements)
-19. [License](#license)
+7. [Advanced Security Features](#advanced-security-features)
+8. [Cryptography Deep Dive](#cryptography-deep-dive)
+9. [Idempotency Design](#idempotency-design)
+10. [Settlement Pipeline](#settlement-pipeline)
+11. [Security Considerations](#security-considerations)
+12. [Dashboard Walkthrough](#dashboard-walkthrough)
+13. [API Reference](#api-reference)
+14. [Folder Structure](#folder-structure)
+15. [Running Locally](#running-locally)
+16. [Running Tests](#running-tests)
+17. [Production-Grade Improvements](#production-grade-improvements)
+18. [Real-World Constraints and Limitations](#real-world-constraints-and-limitations)
+19. [Future Enhancements](#future-enhancements)
+20. [License](#license)
 
 ---
 
@@ -71,6 +72,10 @@ Idempotency cache (application layer) → unique DB index on `packet_hash` (data
 - **Full mesh simulator** — virtual devices, gossip rounds, bridge uploads, all driven via REST
 - **Interactive dashboard** — dark-themed, real-time, no external JS framework
 - **H2 in-memory DB** — zero-dependency setup, runs with just JDK 17
+- **Offline spend tokens** — server-issued pre-authorization prevents double-spend before packets are created
+- **Encrypted TTL integrity** — `maxHops` committed inside the encrypted payload; intermediaries cannot extend packet lifetime
+- **Signed receiver acknowledgements** — RSA-signed ack packets travel back through the mesh to the sender offline
+- **HMAC-authenticated bridge uploads** — every bridge node has a registered identity; unsigned uploads are rejected
 
 ---
 
@@ -258,7 +263,92 @@ Thread-3: putIfAbsent(hash, t3) → returns t1    → DUPLICATE → dropped imme
 
 ---
 
-## Cryptography Deep Dive
+## Advanced Security Features
+
+### Offline Double-Spend Prevention (Spend Tokens)
+
+The naive implementation allows a sender to sign two separate payments while offline — both packets are valid and whichever bridge uploads first settles, leaving the second recipient confused.
+
+**Solution:** Before going offline, the sender requests a spend token from the server via `POST /api/token/issue`. The server checks `balance − already_reserved ≥ requested_amount` and issues a token with a unique nonce. The sender embeds this nonce inside the encrypted `PaymentInstruction`. On settlement, the server atomically consumes the token — the second payment with the same nonce is rejected immediately.
+
+```
+User online → POST /api/token/issue { senderVpa, amount }
+           ← { nonce, expiresAt }
+
+User offline → creates PaymentInstruction { ..., spendTokenNonce: nonce }
+            → encrypts → sends into mesh
+
+Server on ingest:
+  SpendTokenService.consume(nonce, senderVpa, amount)
+    token ACTIVE? → consume it → proceed to settlement
+    token CONSUMED/EXPIRED? → reject immediately
+```
+
+Token lifecycle: `ACTIVE → CONSUMED` (on settlement) or `ACTIVE → EXPIRED` (after 24h, evicted by scheduler).
+
+---
+
+### TTL Integrity via Encrypted Commitment
+
+The outer `ttl` field on a `MeshPacket` lives in cleartext — any intermediate can reset it to 5, keeping a packet alive indefinitely. This defeats flood control.
+
+**Solution:** The sender commits `maxHops` inside the encrypted `PaymentInstruction`. The server verifies on ingest:
+
+```
+age_seconds = now - instruction.signedAt
+allowed_window = maxHops × perHopSeconds   (default: 5 × 300s = 1500s)
+
+if age_seconds > allowed_window → INVALID("ttl_integrity_violated")
+```
+
+An intermediate cannot extend `maxHops` — it lives inside AES-GCM ciphertext. Any modification invalidates the GCM tag.
+
+---
+
+### Offline Receiver Acknowledgement
+
+Without acks, the sender gets zero confirmation until both parties are online. Settlement is asynchronous — the receiver has no signal at all.
+
+**Solution:** When a receiver's device gets a packet over BLE, it signs an `AckPacket` with its RSA private key:
+
+```
+signingMaterial = packetId + "|" + receiverVpa + "|" + timestamp
+signature       = SHA256withRSA(signingMaterial, receiverPrivateKey)
+```
+
+The signed ack travels back through the mesh in reverse (gossip, reverse direction). The sender can verify it using the receiver's known public key — giving offline confirmation before any bridge reaches the internet.
+
+API flow:
+1. `POST /api/mesh/ack/create` — receiver signs ack
+2. `POST /api/mesh/ack/gossip` — acks propagate back toward sender
+3. `GET /api/acks/{packetId}` — sender retrieves + verifies acks
+
+---
+
+### Bridge Node Identity (HMAC-Signed Uploads)
+
+Without bridge authentication, any node can POST to `/api/bridge/ingest` impersonating a bridge. This makes per-bridge rate limiting and revocation impossible.
+
+**Solution:** Bridge nodes register once while online with a secret (`POST /api/bridge/register`). On every upload, the bridge signs the ciphertext:
+
+```
+signature = HMAC-SHA256(ciphertext, hmacSecret)
+```
+
+The server recomputes and compares. Unknown node, revoked node, or signature mismatch → HTTP 403. This enables per-bridge audit trail and instant revocation.
+
+```
+Bridge registration (one-time, online):
+  POST /api/bridge/register { nodeId, hmacSecret }
+
+Upload (each time):
+  POST /api/bridge/ingest
+  Headers: X-Bridge-Node-Id: bridge-prod-1
+           X-Bridge-Signature: <base64 HMAC>
+  Body: MeshPacket JSON
+```
+
+---
 
 ### Why Hybrid Encryption?
 
@@ -516,32 +606,42 @@ upi-offline-mesh/
     │       ├── UpiWithoutInternetApplication.java   Spring Boot entry point
     │       │
     │       ├── config/
-    │       │   └── AppConfig.java             @EnableScheduling for cache eviction
+    │       │   └── AppConfig.java             @EnableScheduling for cache + token eviction
     │       │
     │       ├── entity/                        ── Domain layer
     │       │   ├── Account.java               JPA entity; @Version = optimistic lock
     │       │   ├── Transaction.java           Settled/rejected tx record; unique on packetHash
     │       │   ├── MeshPacket.java            Wire format for mesh propagation
     │       │   ├── PaymentInstruction.java    Decrypted payload (inner structure)
-    │       │   └── VirtualDevice.java         Simulated phone; holds packets in ConcurrentHashMap
+    │       │   ├── VirtualDevice.java         Simulated phone; holds packets + acks
+    │       │   ├── SpendToken.java            Offline spend token (double-spend prevention)
+    │       │   ├── AckPacket.java             Signed receiver acknowledgement packet
+    │       │   └── BridgeNode.java            Registered bridge node identity
     │       │
     │       ├── enums/
-    │       │   └── Status.java                SETTLED | REJECTED
+    │       │   ├── Status.java                SETTLED | REJECTED
+    │       │   └── TokenStatus.java           ACTIVE | CONSUMED | EXPIRED
     │       │
     │       ├── repository/
     │       │   ├── AccountRepository.java     Spring Data JPA
-    │       │   └── TransactionRepository.java findTop20ByOrderByIdDesc
+    │       │   ├── TransactionRepository.java findTop20ByOrderByIdDesc
+    │       │   ├── SpendTokenRepository.java  findByNonce, findBySenderVpaAndStatus, expireTokensBefore
+    │       │   └── BridgeNodeRepository.java  findByRevokedFalse, findByRevokedTrue
     │       │
     │       ├── crypto/                        ── Cryptography layer
     │       │   ├── ServerKeyHolder.java        Generates RSA-2048 keypair on startup; exposes public key
-    │       │   └── HybridCryptoService.java    RSA-OAEP + AES-256-GCM encrypt/decrypt; ciphertext hash
+    │       │   ├── HybridCryptoService.java    RSA-OAEP + AES-256-GCM encrypt/decrypt; ciphertext hash
+    │       │   └── ReceiverKeyHolder.java      Per-VPA RSA keypairs for receiver ack signing/verification
     │       │
     │       ├── service/                       ── Business logic
     │       │   ├── DemoService.java            Seeds accounts; simulates sender phone
-    │       │   ├── MeshSimulatorService.java   Gossip protocol; virtual device management
+    │       │   ├── MeshSimulatorService.java   Gossip protocol; virtual device management; bridge uploads
     │       │   ├── IdempotencyService.java     Atomic ConcurrentHashMap claim; scheduled eviction
-    │       │   ├── BridgeIngestionService.java Full ingestion pipeline (THE core service)
-    │       │   └── SettlementService.java      @Transactional debit + credit + ledger
+    │       │   ├── BridgeIngestionService.java Full ingestion pipeline (hash → dedup → decrypt → settle)
+    │       │   ├── BridgeAuthService.java      Bridge registration, HMAC verification, revocation
+    │       │   ├── SettlementService.java      @Transactional debit + credit + ledger
+    │       │   ├── SpendTokenService.java      Token issuance, consumption, expiry eviction
+    │       │   └── AckService.java             Ack creation, RSA signing/verification, gossip
     │       │
     │       └── controller/
     │           ├── ApiController.java          All REST endpoints
@@ -707,46 +807,47 @@ idempotency_cache_hit_rate           # % of ingestions that are duplicates
 
 These are not implementation bugs — they are inherent properties of offline payment systems. Knowing them makes the project's scope credible.
 
-### 1. No proof of funds at signing time
+### 1. No proof of funds at signing time *(mitigated by Spend Tokens)*
 
-When the sender's phone generates the packet, there is no live balance check. If Shubham has ₹500 and signs a ₹500 payment for Sarvesh in basement A, then walks to basement B and signs another ₹500 for Rushabh, both packets propagate independently. Whichever reaches the backend first settles; the second is `REJECTED`. Rushabh or Sarvesh is short ₹500 with no recourse.
+Without tokens, a sender with ₹500 could sign two ₹500 payments while offline. **This project implements offline spend tokens** — the server pre-authorizes each payment and the second issuance fails immediately. However, a motivated attacker who never goes online cannot be stopped from attempting this at the cryptographic layer alone.
 
-**This is why UPI Lite uses a pre-funded hardware-backed offline wallet** — the available funds are locked at offline wallet creation time and cryptographically committed. This demo does not implement UPI Lite semantics.
+### 2. Bluetooth reliability on modern mobile OSes
 
-### 2. Double-spend is possible by a motivated attacker
+Android throttles background BLE scanning since API 26. iOS does not support BLE peripheral mode for arbitrary data transfer from third-party apps in the background. Real-world gossip propagation requires foreground app usage or a custom BLE stack — non-trivial. This demo sidesteps the problem entirely with an in-process simulator.
 
-A sender with ₹500 can sign the same ₹500 payment to two different recipients with different nonces. Both packets are valid. Only one settles. The sender gets one "free" transaction. Mitigating this requires real-time fund reservation at signing, which requires connectivity — a fundamental tension.
-
-### 3. Bluetooth reliability on modern mobile OSes
-
-Android throttles background BLE scanning since API 26. iOS does not support BLE peripheral mode for arbitrary data transfer from third-party apps in the background. Real-world gossip propagation requires foreground app usage or a custom BLE stack — non-trivial. This demo sidesteps the problem entirely.
-
-### 4. Privacy and regulatory surface
+### 3. Privacy and regulatory surface
 
 An intermediary device carries a metadata trail: "payment packet was in my vicinity at this time." Even though the payload is encrypted, the existence and timing of the packet is observable. This has KYC, AML, and privacy implications that would need regulatory sign-off before production deployment in India.
 
-### 5. Receiver confirmation latency
+### 4. Receiver confirmation latency *(mitigated by Offline Acks)*
 
-The receiver has no real-time confirmation. They see a "sent" screen on the sender's phone, but settlement happens asynchronously — possibly minutes or hours later. The receiver can't confirm receipt until both are online. For merchant payments this is commercially difficult.
+**This project implements signed offline acknowledgements** — the receiver signs a receipt the moment the packet arrives, and it gossips back to the sender. However, if the mesh is sparse and no gossip path exists back to the sender, they still must wait until both go online for settlement confirmation.
+
+### 5. Bridge node trust *(mitigated by HMAC Auth)*
+
+**This project implements HMAC-authenticated bridge uploads** with registration and revocation. The remaining gap is the registration endpoint itself — in production it would require mTLS or admin-level auth, not an open POST.
 
 ---
 
 ## Future Enhancements
 
-These represent the gap between this demo and a production-viable system:
+Items marked ✅ are already implemented in this project.
 
 **Short-term (technical completeness)**
-- Android client (Kotlin) — the sender phone side of the flow running on real hardware
+- Android client (Kotlin) — the sender phone side running on real hardware
 - BLE GATT integration — real Bluetooth gossip between physical devices
 - Bloom filter at the hop layer — efficient packet dedup without storing all packetIds
-- Pre-funded offline wallet — cryptographic proof of funds at signing time
+- ✅ Offline spend tokens — server-issued pre-authorization for double-spend prevention
+- ✅ Encrypted TTL commitment — sender-committed `maxHops` inside ciphertext
+- ✅ Signed receiver acknowledgements — RSA-signed ack gossips back to sender offline
+- ✅ HMAC-authenticated bridge uploads — registered bridge identity + revocation
 
 **Medium-term (production readiness)**
 - Redis for distributed idempotency cache
-- mTLS on `/bridge/ingest` with bridge certificate management
+- mTLS on `/bridge/ingest` with bridge certificate management (replaces HMAC)
 - PostgreSQL + Flyway migrations
 - Prometheus metrics + Grafana dashboard for mesh analytics
-- Signed bridge uploads with request-level HMAC
+- Admin-auth protected bridge registration endpoint
 
 **Long-term (ecosystem)**
 - NPCI / bank core integration for real fund settlement

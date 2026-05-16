@@ -17,30 +17,27 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Manages offline spend tokens — the fix for the double-spend problem.
+ * Offline spend tokens manage karta hai — double-spend prevention ka core.
  *
- * <p>WHY THIS EXISTS:
- * Without tokens, Shubham can sign two separate ₹500 payments while offline
- * (one to Sarvesh, one to Rushabh), and whichever bridge uploads first settles.
- * The second packet also appears valid and gets REJECTED only at settlement time
- * because the balance is already gone — which is fine, but it means the second
- * recipient is left confused with no money and no explanation until they go online.
+ * <p>Bina token ke, ek sender offline hoke ek hi balance se do alag payments sign
+ * kar sakta hai. Dono packets valid dikhenge. Jo bridge pehle upload karega woh settle
+ * hoga, doosra REJECTED hoga — lekin doosra receiver confused rahega.
  *
- * <p>With tokens, the server pre-authorises each payment at issuance time by
- * checking that (current balance − already reserved amount) ≥ requested amount.
- * Two simultaneous ₹500 tokens on a ₹500 balance: the second issuance fails
- * immediately with INSUFFICIENT_BALANCE_FOR_RESERVATION — no packet is ever
- * created, so no false hope for Rushabh.
+ * <p>Token ke saath, server issuance pe hi check karta hai ki
+ * {@code balance - already_reserved >= requestedAmount}. Same balance pe doosra token
+ * issuance fail hoga {@code INSUFFICIENT_BALANCE_FOR_RESERVATION} se — packet hi
+ * nahi banega.
  *
- * <p>THE CONSUME CONTRACT (exactly-once):
- * consume() runs inside a @Transactional block and does a select-then-update.
- * The unique index on `nonce` plus the status=ACTIVE guard means only one
- * concurrent thread can win — the second one either finds status=CONSUMED
- * (already done) or hits a constraint violation (race). Either way it loses.
+ * <p>Consume contract (exactly-once):
+ * {@link #consume} {@code @Transactional} mein chalta hai aur select-then-update karta hai.
+ * {@code nonce} pe unique index aur {@code status=ACTIVE} guard ensure karta hai ki sirf
+ * ek thread win kare — doosra ya to {@code CONSUMED} status dekhega ya constraint violation.
  *
- * <p>TOKEN LIFECYCLE:
- *   ACTIVE  ->  CONSUMED  (packet settled successfully)
- *   ACTIVE  ->  EXPIRED   (eviction job runs, expiresAt has passed)
+ * <p>Token lifecycle:
+ * <pre>
+ *   ACTIVE --[settle]--> CONSUMED
+ *   ACTIVE --[expiry]--> EXPIRED
+ * </pre>
  */
 @Service
 @Slf4j
@@ -52,18 +49,21 @@ public class SpendTokenService {
     @Value("${upi.mesh.token-ttl-seconds:86400}")
     private long tokenTtlSeconds;
 
-    // ── Issue ────────────────────────────────────────────────────────────────
-
     /**
-     * Issue a spend token for senderVpa authorising exactly `amount`.
+     * Sender ke liye ek spend token issue karo jo exactly {@code amount} authorize kare.
      *
-     * <p>Guards:
-     * 1. Sender must exist.
-     * 2. (balance − totalActiveReserved) must be >= amount.
+     * <p>Do checks:
+     * <ol>
+     *   <li>Sender exist karna chahiye.</li>
+     *   <li>{@code balance - totalActiveReserved >= amount} hona chahiye.</li>
+     * </ol>
      *
-     * Returns the token nonce — the sender embeds this in PaymentInstruction
-     * before encrypting. The nonce never travels in cleartext outside the
-     * encrypted ciphertext.
+     * <p>Token ka nonce sender ke phone ko milta hai jo ise {@link com.upimesh.entity.PaymentInstruction}
+     * mein encrypt karke embed karta hai. Nonce kabhi cleartext mein travel nahi karta.
+     *
+     * @param senderVpa jis sender ke liye token chahiye
+     * @param amount    kitna amount reserve karna hai
+     * @return {@link IssueResult} — success mein nonce aur expiry, fail mein reason
      */
     @Transactional
     public IssueResult issue(String senderVpa, BigDecimal amount) {
@@ -103,20 +103,26 @@ public class SpendTokenService {
         return IssueResult.ok(nonce, token.getExpiresAt());
     }
 
-    // ── Consume ──────────────────────────────────────────────────────────────
-
     /**
-     * Attempt to consume a spend token during settlement.
+     * Settlement ke waqt spend token consume karo.
      *
-     * <p>Rules:
-     * - Token must exist (nonce must match).
-     * - Token must be ACTIVE (not already CONSUMED or EXPIRED).
-     * - Token's senderVpa must match the payment's senderVpa.
-     * - Token's reservedAmount must match the payment amount exactly.
-     * - Token must not have passed its expiresAt.
+     * <p>Yeh checks hote hain:
+     * <ul>
+     *   <li>Token nonce exist karna chahiye.</li>
+     *   <li>Token {@code ACTIVE} hona chahiye — {@code CONSUMED} ya {@code EXPIRED} nahi.</li>
+     *   <li>Token ka {@code senderVpa} payment ke {@code senderVpa} se match karna chahiye.</li>
+     *   <li>Token ka {@code reservedAmount} exactly payment amount ke barabar hona chahiye.</li>
+     *   <li>Token abhi expire nahi hua hona chahiye.</li>
+     * </ul>
      *
-     * If all checks pass, marks the token CONSUMED and returns true.
-     * Any failure returns false — settlement will be rejected.
+     * <p>Sab checks pass hone par token {@code CONSUMED} mark hota hai. Koi bhi fail
+     * hone par {@code false} return hota hai aur settlement reject hoti hai.
+     *
+     * @param nonce       {@link com.upimesh.entity.PaymentInstruction} mein embedded token nonce
+     * @param senderVpa   payment ka sender VPA — token VPA se match hona chahiye
+     * @param amount      payment amount — token reserved amount se exactly match hona chahiye
+     * @param packetHash  audit trail ke liye
+     * @return {@link ConsumeResult} — success ya reason ke saath failure
      */
     @Transactional
     public ConsumeResult consume(String nonce, String senderVpa,
@@ -168,21 +174,30 @@ public class SpendTokenService {
         return ConsumeResult.ok();
     }
 
-    // ── Status ───────────────────────────────────────────────────────────────
-
-    /** Return the current state of a token by nonce (for the dashboard). */
+    /**
+     * Nonce se token ki current state fetch karo — dashboard ke liye.
+     *
+     * @param nonce token ka nonce
+     * @return {@link SpendToken} agar mila, warna {@code null}
+     */
     public SpendToken getByNonce(String nonce) {
         return tokenRepo.findByNonce(nonce).orElse(null);
     }
 
-    /** All tokens for a given sender (dashboard view). */
+    /**
+     * Ek sender ke saare active tokens return karo — dashboard display ke liye.
+     *
+     * @param senderVpa sender ka VPA
+     * @return active tokens ki list
+     */
     public List<SpendToken> getTokensForSender(String senderVpa) {
         return tokenRepo.findBySenderVpaAndStatus(senderVpa, TokenStatus.ACTIVE);
     }
 
-    // ── Eviction ─────────────────────────────────────────────────────────────
-
-    /** Runs every 60 seconds. Bulk-expires tokens past their TTL. */
+    /**
+     * Har 60 seconds mein chalta hai. Time limit khatam hone wale tokens bulk mein
+     * {@code EXPIRED} mark karta hai taaki DB clean rahe.
+     */
     @Scheduled(fixedDelay = 60_000)
     @Transactional
     public void evictExpiredTokens() {
@@ -192,8 +207,14 @@ public class SpendTokenService {
         }
     }
 
-    // ── Result records ───────────────────────────────────────────────────────
-
+    /**
+     * Token issuance ka result.
+     *
+     * @param success   {@code true} agar token issue hua
+     * @param nonce     issued token ka nonce (sirf success mein)
+     * @param expiresAt kab token expire hoga (sirf success mein)
+     * @param reason    failure ka reason (sirf fail mein)
+     */
     public record IssueResult(boolean success, String nonce, Instant expiresAt, String reason) {
         public static IssueResult ok(String nonce, Instant expiresAt) {
             return new IssueResult(true, nonce, expiresAt, null);
@@ -203,6 +224,12 @@ public class SpendTokenService {
         }
     }
 
+    /**
+     * Token consume karne ka result.
+     *
+     * @param success {@code true} agar token successfully consume hua
+     * @param reason  failure ka reason (sirf fail mein)
+     */
     public record ConsumeResult(boolean success, String reason) {
         public static ConsumeResult ok() {
             return new ConsumeResult(true, null);

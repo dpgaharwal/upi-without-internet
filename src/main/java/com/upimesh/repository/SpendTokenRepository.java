@@ -11,18 +11,40 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * {@link SpendToken} entity ke liye Spring Data JPA repository.
+ *
+ * <p>Spend token lifecycle manage karne ke liye custom queries hain —
+ * nonce se lookup, active tokens ki list, aur scheduled expiry.
+ */
 @Repository
 public interface SpendTokenRepository extends JpaRepository<SpendToken, Long> {
 
-    /** Look up a token by its nonce — the value embedded in the PaymentInstruction. */
+    /**
+     * Nonce se token dhundho — settlement ke waqt server yahi use karta hai
+     * {@link PaymentInstruction} ke andar se nonce nikaalke.
+     *
+     * @param nonce token ka unique nonce
+     * @return token agar mila, warna empty
+     */
     Optional<SpendToken> findByNonce(String nonce);
 
-    /** All active tokens for a sender — used to compute total reserved amount. */
+    /**
+     * Ek sender ke saare active tokens — total reserved amount calculate karne ke liye
+     * naya token issue karne se pehle use hota hai.
+     *
+     * @param senderVpa sender ka VPA
+     * @param status filter karne wali status (usually {@code ACTIVE})
+     * @return matching tokens ki list
+     */
     List<SpendToken> findBySenderVpaAndStatus(String senderVpa, TokenStatus status);
 
     /**
-     * Bulk-expire tokens whose expiresAt has passed.
-     * Called by the scheduled eviction job in SpendTokenService.
+     * Expired tokens ko bulk mein {@code EXPIRED} mark karo.
+     * Scheduled eviction job regularly yeh call karta hai.
+     *
+     * @param now current time — is se pehle expire hone wale tokens mark honge
+     * @return kitne tokens expire kiye gaye
      */
     @Modifying
     @Transactional

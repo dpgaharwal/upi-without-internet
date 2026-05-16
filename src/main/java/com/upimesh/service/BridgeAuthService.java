@@ -13,37 +13,26 @@ import java.util.Base64;
 import java.util.List;
 
 /**
- * Bridge node registration + HMAC-signed upload verification.
+ * Bridge node registration aur HMAC-signed upload verification manage karta hai.
  *
- * HOW IT WORKS:
+ * <p>Registration (ek baar, online mein):
+ * Bridge {@code POST /api/bridge/register} call karta hai {@code { nodeId, hmacSecret }} ke saath.
+ * Server {@code nodeId → hmacSecret} DB mein store karta hai. Ab yeh bridge "known" hai.
  *
- * Registration (online, one-time):
- *   Bridge calls POST /api/bridge/register with { nodeId, hmacSecret }.
- *   Server stores nodeId → hmacSecret in DB.
- *   From now on, this bridge is "known".
+ * <p>Upload (jab bridge packets flush karna chahta hai):
+ * Bridge {@code HMAC-SHA256(ciphertext, hmacSecret)} compute karta hai aur
+ * {@code X-Bridge-Signature} header mein bhejta hai. Server {@link #verifyUpload} call karta hai:
+ * <ol>
+ *   <li>NodeId DB mein dhundho — nahi mila to reject.</li>
+ *   <li>Revoked hai to reject.</li>
+ *   <li>HMAC recompute karo aur header se compare karo — mismatch to reject.</li>
+ *   <li>Sab theek to ingestion pipeline mein jaane do.</li>
+ * </ol>
  *
- * Upload (when bridge has packets to flush):
- *   Bridge signs: HMAC-SHA256(ciphertext, hmacSecret) → base64 signature.
- *   Bridge sends: POST /api/bridge/ingest with:
- *     - X-Bridge-Node-Id: <nodeId>
- *     - X-Bridge-Signature: <base64 HMAC>
- *     - body: MeshPacket JSON
- *   Server calls BridgeAuthService.verifyUpload():
- *     1. Looks up nodeId in DB. If not found → REJECT (unknown bridge).
- *     2. If revoked → REJECT.
- *     3. Recomputes HMAC(ciphertext, stored secret). Compare with header. If mismatch → REJECT.
- *     4. All good → proceed to BridgeIngestionService.
- *
- * WHY HMAC OVER THE CIPHERTEXT:
- *   The ciphertext is already tamper-proof (AES-GCM authenticated encryption).
- *   But without bridge auth, ANY node can POST any ciphertext pretending to be a bridge.
- *   HMAC ties the upload to a specific registered bridge identity.
- *   This enables: per-bridge rate limiting, revocation, audit trail.
- *
- * Revocation:
- *   POST /api/bridge/revoke/{nodeId} sets revoked=true.
- *   All subsequent uploads from that bridge are rejected at the auth layer,
- *   before even touching the ingestion pipeline.
+ * <p>Ciphertext pe HMAC kyun: ciphertext already AES-GCM se tamper-proof hai, lekin
+ * bridge auth ke bina koi bhi node koi bhi ciphertext POST kar sakta tha. HMAC upload
+ * ko ek specific registered bridge identity se tie karta hai — per-bridge rate limiting
+ * aur revocation enable hota hai.
  */
 @Service
 @Slf4j
@@ -53,12 +42,14 @@ public class BridgeAuthService {
 
     @Autowired private BridgeNodeRepository bridgeRepo;
 
-    // ── Registration ─────────────────────────────────────────────────────────
-
     /**
-     * Register a new bridge node.
-     * Idempotent — if nodeId already exists, returns existing node (does NOT update secret).
-     * In production: this would require admin auth, not an open endpoint.
+     * Nayi bridge node register karo.
+     * Idempotent — agar nodeId already exist karta hai to existing node return hota hai
+     * (secret update nahi hota). Production mein yeh admin auth ke peeche hona chahiye.
+     *
+     * @param nodeId          bridge ka unique identifier
+     * @param hmacSecretBase64 base64-encoded HMAC secret, minimum 32 bytes
+     * @return {@link RegisterResult} — success ya failure reason ke saath
      */
     public RegisterResult register(String nodeId, String hmacSecretBase64) {
         if (nodeId == null || nodeId.isBlank()) {
@@ -93,15 +84,13 @@ public class BridgeAuthService {
         return RegisterResult.ok(node, false);
     }
 
-    // ── Verification ─────────────────────────────────────────────────────────
-
     /**
-     * Verify a bridge upload.
+     * Bridge upload verify karo — nodeId check, revocation check, HMAC signature verify.
      *
-     * @param nodeId    value from X-Bridge-Node-Id header
-     * @param signature value from X-Bridge-Signature header (base64 HMAC)
-     * @param ciphertext the raw ciphertext from the MeshPacket body (what was signed)
-     * @return VerifyResult
+     * @param nodeId     {@code X-Bridge-Node-Id} header ki value
+     * @param signature  {@code X-Bridge-Signature} header ki value (base64 HMAC)
+     * @param ciphertext {@link com.upimesh.entity.MeshPacket} body ka ciphertext (jo sign hua tha)
+     * @return {@link VerifyResult} — success ya failure reason ke saath
      */
     public VerifyResult verifyUpload(String nodeId, String signature, String ciphertext) {
         if (nodeId == null || nodeId.isBlank() || nodeId.equals("unknown")) {
@@ -139,8 +128,12 @@ public class BridgeAuthService {
         return VerifyResult.ok();
     }
 
-    // ── Revocation ────────────────────────────────────────────────────────────
-
+    /**
+     * Bridge node revoke karo — iske baad is bridge ke saare uploads reject honge.
+     *
+     * @param nodeId revoke karne wala bridge ID
+     * @return {@link RevokeResult} — success ya failure reason
+     */
     public RevokeResult revoke(String nodeId) {
         BridgeNode node = bridgeRepo.findById(nodeId).orElse(null);
         if (node == null) return RevokeResult.fail("unknown_bridge_node");
@@ -152,11 +145,14 @@ public class BridgeAuthService {
         return RevokeResult.ok();
     }
 
-    // ── HMAC utility ─────────────────────────────────────────────────────────
-
     /**
-     * Compute HMAC-SHA256(data, secretBase64) → base64 string.
-     * This is what the bridge must do before each upload.
+     * {@code HMAC-SHA256(data, secretBase64)} compute karo aur base64 string return karo.
+     * Bridge har upload se pehle yahi karta hai; server verify karne ke liye yahi call karta hai.
+     *
+     * @param data          sign karne wala data (ciphertext)
+     * @param secretBase64  base64-encoded HMAC secret
+     * @return base64-encoded HMAC signature
+     * @throws Exception agar crypto operation fail ho
      */
     public String computeHmac(String data, String secretBase64) throws Exception {
         byte[] secretBytes = Base64.getDecoder().decode(secretBase64);
@@ -166,18 +162,24 @@ public class BridgeAuthService {
         return Base64.getEncoder().encodeToString(hmacBytes);
     }
 
-    // ── List ─────────────────────────────────────────────────────────────────
-
+    /** Saare registered bridges return karo — active aur revoked dono. Dashboard ke liye. */
     public List<BridgeNode> listAll() {
         return bridgeRepo.findAll();
     }
 
+    /** Sirf active (non-revoked) bridges return karo. */
     public List<BridgeNode> listActive() {
         return bridgeRepo.findByRevokedFalse();
     }
 
-    // ── Result records ───────────────────────────────────────────────────────
-
+    /**
+     * Bridge registration ka result.
+     *
+     * @param success       {@code true} agar registration successful rahi
+     * @param reason        failure ka reason (sirf fail mein)
+     * @param node          registered bridge node (sirf success mein)
+     * @param alreadyExisted {@code true} agar bridge pehle se registered tha
+     */
     public record RegisterResult(boolean success, String reason, BridgeNode node,
                                  boolean alreadyExisted) {
         public static RegisterResult ok(BridgeNode node, boolean existed) {
@@ -188,11 +190,23 @@ public class BridgeAuthService {
         }
     }
 
+    /**
+     * Upload verification ka result.
+     *
+     * @param success {@code true} agar signature valid aur bridge known + active hai
+     * @param reason  failure ka reason (sirf fail mein)
+     */
     public record VerifyResult(boolean success, String reason) {
         public static VerifyResult ok() { return new VerifyResult(true, null); }
         public static VerifyResult fail(String r) { return new VerifyResult(false, r); }
     }
 
+    /**
+     * Bridge revocation ka result.
+     *
+     * @param success {@code true} agar revocation successful rahi
+     * @param reason  failure ka reason (sirf fail mein)
+     */
     public record RevokeResult(boolean success, String reason) {
         public static RevokeResult ok() { return new RevokeResult(true, null); }
         public static RevokeResult fail(String r) { return new RevokeResult(false, r); }

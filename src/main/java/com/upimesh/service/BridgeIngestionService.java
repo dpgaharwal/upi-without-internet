@@ -13,12 +13,18 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Orchestrates the full server-side pipeline for one inbound packet from a bridge node:
+ * Bridge se aane wale ek packet ke liye pura server-side pipeline orchestrate karta hai.
  *
- * <p>1. Hash the ciphertext. 2. Try to claim that hash via the idempotency cache. - If already
- * claimed: this is a duplicate. Drop it. 3. Decrypt the ciphertext with the server's private key. -
- * If decryption fails: tampered or junk. Reject. 4. Check freshness — reject if signedAt is too old
- * (replay protection). 5. Hand off to SettlementService for the actual debit/credit.
+ * <p>Steps sequence:
+ * <ol>
+ *   <li>Ciphertext ka SHA-256 hash nikalo.</li>
+ *   <li>Idempotency cache mein hash claim karo — already claimed to duplicate, drop karo.</li>
+ *   <li>Ciphertext decrypt karo server ki private key se — fail to tampered/junk, reject.</li>
+ *   <li>Freshness check — {@code signedAt} zyada purana to replay attack, reject.</li>
+ *   <li>TTL integrity check — encrypted {@code maxHops} se verify karo ki packet artificially
+ *       zinda nahi rakha gaya.</li>
+ *   <li>{@link SettlementService} ko hand off karo actual debit/credit ke liye.</li>
+ * </ol>
  */
 @Service
 @Slf4j
@@ -34,7 +40,14 @@ public class BridgeIngestionService {
   @Value("${upi.mesh.per-hop-seconds:300}")
   private long perHopSeconds;
 
-  public IngestResult ingest(MeshPacket packet, String bridgeNodeId) {  // hopCount param REMOVED
+  /**
+   * Ek inbound mesh packet ingest karo aur pipeline se chalaao.
+   *
+   * @param packet      bridge se aaya hua packet
+   * @param bridgeNodeId jis bridge ne upload kiya (audit ke liye)
+   * @return {@link IngestResult} — {@code SETTLED}, {@code DUPLICATE_DROPPED}, ya {@code INVALID}
+   */
+  public IngestResult ingest(MeshPacket packet, String bridgeNodeId) {
     try {
       String packetHash = crypto.hashCiphertext(packet.getCiphertext());
 
@@ -89,6 +102,14 @@ public class BridgeIngestionService {
     }
   }
 
+  /**
+   * Ingestion pipeline ka final result.
+   *
+   * @param outcome       {@code SETTLED}, {@code DUPLICATE_DROPPED}, ya {@code INVALID}
+   * @param packetHash    ciphertext ka SHA-256 hash
+   * @param reason        failure/duplicate reason (success mein {@code null})
+   * @param transactionId DB transaction ID (sirf {@code SETTLED} mein)
+   */
   public record IngestResult(String outcome, String packetHash, String reason, Long transactionId) {
     public static IngestResult settled(String hash, Transaction tx) {
       return new IngestResult("SETTLED", hash, null, tx.getId());

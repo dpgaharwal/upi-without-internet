@@ -20,21 +20,24 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
- * Hybrid encryption — the same pattern used by TLS, PGP, Signal, etc.
+ * Hybrid encryption — TLS, PGP, Signal jaisi wahi pattern.
  *
- * <p>Why hybrid? RSA can only encrypt small data (~245 bytes for a 2048-bit key). Our payment
- * instruction (JSON) might be ~300 bytes, and in real use we might include device certificates and
- * signatures pushing it well over.
+ * <p>RSA kyun nahi akela? RSA-2048 sirf ~245 bytes plaintext encrypt kar sakta hai.
+ * Payment instruction JSON pehle hi ~300 bytes hoti hai — RSA akela fail ho jaata.
  *
- * <p>Solution: generate a fresh AES key per packet, encrypt the JSON with AES-GCM (fast +
- * authenticated), then encrypt JUST the AES key with RSA-OAEP.
+ * <p>Solution — hybrid approach:
+ * <ol>
+ *   <li>Har packet ke liye ek fresh random AES-256 key generate karo.</li>
+ *   <li>Payment instruction JSON ko AES-GCM se encrypt karo (fast + authenticated).</li>
+ *   <li>Sirf AES key ko RSA-OAEP se encrypt karo (yeh small enough hai RSA ke liye).</li>
+ * </ol>
  *
- * <p>Wire format (after base64 encoding): [ 256 bytes RSA-encrypted AES key ][ 12 bytes GCM IV ][
- * ciphertext + 16-byte tag ]
+ * <p>Wire format (base64-encoded):
+ * {@code [256 bytes RSA-encrypted AES key][12 bytes GCM IV][ciphertext + 16-byte GCM tag]}
  *
- * <p>AES-GCM is authenticated encryption: any single-bit tampering with the ciphertext causes
- * decryption to fail with an exception. This is what makes it safe for untrusted intermediates to
- * hold.
+ * <p>AES-GCM authenticated encryption hai: ciphertext mein ek bhi bit badalne par
+ * decryption exception throw karta hai. Isliye untrusted intermediate devices safely
+ * packet hold kar sakte hain — tamper impossible hai.
  */
 @Service
 public class HybridCryptoService {
@@ -44,7 +47,7 @@ public class HybridCryptoService {
   private static final int AES_KEY_BITS = 256;
   private static final int GCM_IV_BYTES = 12;
   private static final int GCM_TAG_BITS = 128;
-  private static final int RSA_ENCRYPTED_KEY_BYTES = 256; // for 2048-bit RSA
+  private static final int RSA_ENCRYPTED_KEY_BYTES = 256; // 2048-bit RSA ke liye
 
   private final SecureRandom rng = new SecureRandom();
   private final ObjectMapper json = new ObjectMapper();
@@ -52,8 +55,13 @@ public class HybridCryptoService {
   @Autowired private ServerKeyHolder serverKey;
 
   /**
-   * Encrypt a payment instruction with the server's public key. Called by the simulated sender
-   * device.
+   * Payment instruction ko server ki public key se encrypt karo.
+   * Simulated sender device yeh call karta hai packet banate waqt.
+   *
+   * @param instruction encrypt karne wali payment details
+   * @param serverPublicKey server ki RSA-2048 public key
+   * @return base64-encoded hybrid ciphertext
+   * @throws Exception agar encryption fail ho
    */
   public String encrypt(PaymentInstruction instruction, PublicKey serverPublicKey)
       throws Exception {
@@ -88,8 +96,12 @@ public class HybridCryptoService {
   }
 
   /**
-   * Decrypt with the server's private key. If anything has been tampered with — wrong key, modified
-   * ciphertext, truncated input — this throws.
+   * Server ki private key se decrypt karo.
+   * Kuch bhi tamper hua ho — wrong key, modified ciphertext, truncated input — yeh throw karta hai.
+   *
+   * @param base64Ciphertext base64-encoded hybrid ciphertext
+   * @return decrypted {@link PaymentInstruction}
+   * @throws Exception agar decryption ya deserialization fail ho (tamper detected)
    */
   public PaymentInstruction decrypt(String base64Ciphertext) throws Exception {
 
@@ -130,11 +142,16 @@ public class HybridCryptoService {
   }
 
   /**
-   * SHA-256 of the ciphertext. THIS is the idempotency key.
+   * Ciphertext ka SHA-256 hash — yahi idempotency key hai.
    *
-   * <p>Why ciphertext and not packetId? Because intermediates can rewrite packetId but cannot forge
-   * a valid ciphertext for a different payload. Two delivered copies of the same packet have
-   * identical ciphertexts, hence identical hashes.
+   * <p>{@code packetId} outer cleartext mein hai aur koi bhi intermediate rewrite kar sakta hai.
+   * Ciphertext immutable hai — koi bhi change GCM tag fail karata hai. Isliye
+   * {@code SHA-256(ciphertext)} tamper-proof dedup key hai. Do duplicate deliveries ka
+   * ciphertext byte-identical hota hai, hence hash identical.
+   *
+   * @param base64Ciphertext base64-encoded ciphertext
+   * @return lowercase hex SHA-256 digest
+   * @throws Exception agar hashing fail ho
    */
   public String hashCiphertext(String base64Ciphertext) throws Exception {
     MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
