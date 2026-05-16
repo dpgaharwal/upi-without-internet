@@ -177,7 +177,7 @@ public class ApiController {
 
     uploads.parallelStream().forEach(up -> {
       BridgeIngestionService.IngestResult r =
-              bridge.ingest(up.packet(), up.bridgeNodeId(), 5 - up.packet().getTtl());
+              bridge.ingest(up.packet(), up.bridgeNodeId());
       synchronized (results) {
         results.add(Map.of(
                 "bridgeNode", up.bridgeNodeId(),
@@ -201,9 +201,9 @@ public class ApiController {
   @PostMapping("/bridge/ingest")
   public ResponseEntity<?> ingest(
           @RequestBody MeshPacket packet,
-          @RequestHeader(value = "X-Bridge-Node-Id", defaultValue = "unknown") String bridgeNodeId,
-          @RequestHeader(value = "X-Hop-Count", defaultValue = "0") int hopCount) {
-    BridgeIngestionService.IngestResult r = bridge.ingest(packet, bridgeNodeId, hopCount);
+          @RequestHeader(value = "X-Bridge-Node-Id", defaultValue = "unknown") String bridgeNodeId) {
+    // X-Hop-Count header REMOVED — untrusted, ignored
+    BridgeIngestionService.IngestResult r = bridge.ingest(packet, bridgeNodeId);
     return ResponseEntity.ok(r);
   }
 

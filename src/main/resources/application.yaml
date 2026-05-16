@@ -32,3 +32,4 @@ upi:
     idempotency-ttl-seconds: 86400
     packet-max-age-seconds: 86400
     token-ttl-seconds: 86400
+    per-hop-seconds: 300

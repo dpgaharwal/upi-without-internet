@@ -42,17 +42,6 @@ public class MeshSimulatorService {
             packet.getTtl(), packet.getHopCount());
   }
 
-  /**
-   * One round of gossip.
-   *
-   * CHANGE FOR PROBLEM 5:
-   * When copying a packet to another device, we now increment hopCount
-   * by 1. This means after N gossip rounds through N devices, the packet
-   * carries the real hop count when the bridge uploads it.
-   *
-   * This hop count is then passed to BridgeIngestionService which
-   * compares it against instruction.maxHops (inside the encrypted blob).
-   */
   public GossipResult gossipOnce() {
     int transfers = 0;
     List<VirtualDevice> deviceList = new ArrayList<>(devices.values());
@@ -74,7 +63,7 @@ public class MeshSimulatorService {
           copy.setTtl(pkt.getTtl() - 1);
           copy.setCreatedAt(pkt.getCreatedAt());
           copy.setCiphertext(pkt.getCiphertext());
-          copy.setHopCount(pkt.getHopCount() + 1); // PROBLEM 5 — increment hop count
+          // hopCount NOT set — derived server-side from time, not from outer envelope
 
           dst.hold(copy);
           transfers++;
@@ -86,11 +75,6 @@ public class MeshSimulatorService {
     return new GossipResult(transfers, snapshotMap());
   }
 
-  /**
-   * CHANGE FOR PROBLEM 5:
-   * Now passes packet.getHopCount() as the hop count to BridgeIngestionService
-   * instead of computing it from TTL. This is the real accumulated hop count.
-   */
   public List<BridgeUpload> collectBridgeUploads() {
     List<BridgeUpload> out = new ArrayList<>();
     for (VirtualDevice d : devices.values()) {

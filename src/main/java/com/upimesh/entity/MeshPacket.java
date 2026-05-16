@@ -34,10 +34,4 @@ public class MeshPacket {
   @NotNull private Long createdAt;
 
   @NotBlank private String ciphertext;
-
-  /**
-   * Actual hop count accumulated during mesh propagation.
-   * Starts at 0 at sender, incremented by 1 on each gossip transfer.
-   */
-  private int hopCount;
 }

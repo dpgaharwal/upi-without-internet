@@ -31,14 +31,16 @@ public class BridgeIngestionService {
   @Value("${upi.mesh.packet-max-age-seconds:86400}")
   private long maxAgeSeconds;
 
-  public IngestResult ingest(MeshPacket packet, String bridgeNodeId, int hopCount) {
+  @Value("${upi.mesh.per-hop-seconds:300}")
+  private long perHopSeconds;
+
+  public IngestResult ingest(MeshPacket packet, String bridgeNodeId) {  // hopCount param REMOVED
     try {
       String packetHash = crypto.hashCiphertext(packet.getCiphertext());
 
-      // 1. Idempotency check
+      // 1. Idempotency
       if (!idempotency.claim(packetHash)) {
-        log.info("DUPLICATE packet {} from bridge {} — dropped",
-                packetHash.substring(0, 12) + "...", bridgeNodeId);
+        log.info("DUPLICATE packet {} — dropped", packetHash.substring(0, 12) + "...");
         return IngestResult.duplicate(packetHash);
       }
 
@@ -47,15 +49,13 @@ public class BridgeIngestionService {
       try {
         instruction = crypto.decrypt(packet.getCiphertext());
       } catch (Exception e) {
-        log.warn("Decryption failed for packet {}: {}",
-                packetHash.substring(0, 12) + "...", e.getMessage());
+        log.warn("Decryption failed for {}: {}", packetHash.substring(0, 12) + "...", e.getMessage());
         return IngestResult.invalid(packetHash, "decryption_failed");
       }
 
-      // 3. Freshness check
+      // 3. Freshness check (replay protection)
       long ageSeconds = (Instant.now().toEpochMilli() - instruction.getSignedAt()) / 1000;
       if (ageSeconds > maxAgeSeconds) {
-        log.warn("Packet {} too old ({}s)", packetHash.substring(0, 12) + "...", ageSeconds);
         return IngestResult.invalid(packetHash, "stale_packet");
       }
       if (ageSeconds < -300) {
@@ -63,18 +63,21 @@ public class BridgeIngestionService {
       }
 
       int maxHops = instruction.getMaxHops();
-      if (maxHops > 0 && hopCount > maxHops) {
-        log.warn("Packet {} exceeded maxHops: allowed={} actual={}",
-                packetHash.substring(0, 12) + "...", maxHops, hopCount);
-        return IngestResult.invalid(packetHash,
-                "exceeded_max_hops: allowed=" + maxHops + " actual=" + hopCount);
+      if (maxHops > 0) {
+        long allowedWindowSeconds = (long) maxHops * perHopSeconds;
+        if (ageSeconds > allowedWindowSeconds) {
+          log.warn("Packet {} TTL integrity violated: age={}s allowedWindow={}s (maxHops={} * {}s/hop)",
+                  packetHash.substring(0, 12) + "...", ageSeconds, allowedWindowSeconds,
+                  maxHops, perHopSeconds);
+          return IngestResult.invalid(packetHash,
+                  "ttl_integrity_violated: age=" + ageSeconds + "s exceeds maxHops*perHopSeconds=" + allowedWindowSeconds + "s");
+        }
       }
 
+      // 5. Settle — pass 0 for hopCount (analytics only; untrusted outer value discarded)
+      Transaction tx = settlement.settle(instruction, packetHash, bridgeNodeId, 0);
 
-      // 4. Settle
-      Transaction tx = settlement.settle(instruction, packetHash, bridgeNodeId, hopCount);
-
-      if (tx.getStatus() == com.upimesh.enums.Status.REJECTED) {
+      if (tx.getStatus() == Status.REJECTED) {
         return IngestResult.invalid(packetHash, "settlement_rejected");
       }
 
